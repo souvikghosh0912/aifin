@@ -15,29 +15,39 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { SymbolSearchCombobox } from "@/components/watchlist/symbol-search-combobox";
+import type { SymbolSearchHit } from "@/lib/market/types";
 
 export function AddWatchlistDialog() {
   const [open, setOpen] = useState(false);
   const [pending, start] = useTransition();
+  const [selected, setSelected] = useState<SymbolSearchHit | null>(null);
+  const [notes, setNotes] = useState("");
   const router = useRouter();
+
+  const reset = () => {
+    setSelected(null);
+    setNotes("");
+  };
 
   const onSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    const fd = new FormData(e.currentTarget);
+    if (!selected || !selected.symbol) {
+      toast.error("Pick a symbol from the search results");
+      return;
+    }
+    const fd = new FormData();
+    fd.set("symbol", selected.symbol);
+    fd.set("exchange", selected.exchange);
+    fd.set("notes", notes);
     start(async () => {
       const res = await addWatchlistItem(fd);
       if (res.ok) {
         toast.success("Added to watchlist");
         setOpen(false);
+        reset();
         router.refresh();
       } else {
         toast.error(res.error ?? "Failed to add");
@@ -46,7 +56,13 @@ export function AddWatchlistDialog() {
   };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        setOpen(o);
+        if (!o) reset();
+      }}
+    >
       <DialogTrigger asChild>
         <Button>
           <Plus />
@@ -58,30 +74,26 @@ export function AddWatchlistDialog() {
           <DialogTitle>Add to watchlist</DialogTitle>
         </DialogHeader>
         <form onSubmit={onSubmit} className="space-y-4">
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-2">
-              <Label htmlFor="symbol">Symbol</Label>
-              <Input
-                id="symbol"
-                name="symbol"
-                placeholder="INFY"
-                required
-                autoCapitalize="characters"
-                autoComplete="off"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="exchange">Exchange</Label>
-              <Select name="exchange" defaultValue="NSE">
-                <SelectTrigger id="exchange">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="NSE">NSE</SelectItem>
-                  <SelectItem value="BSE">BSE</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+          <div className="space-y-2">
+            <Label>Symbol</Label>
+            <SymbolSearchCombobox
+              value={selected}
+              onSelect={(hit) => setSelected(hit.symbol ? hit : null)}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="notes">Notes (optional)</Label>
+            <Textarea
+              id="notes"
+              rows={3}
+              maxLength={500}
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="Why are you watching this?"
+            />
+            <p className="text-xs text-muted-foreground">
+              {notes.length} / 500
+            </p>
           </div>
           <DialogFooter>
             <Button
@@ -92,7 +104,10 @@ export function AddWatchlistDialog() {
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={pending}>
+            <Button
+              type="submit"
+              disabled={pending || !selected || !selected.symbol}
+            >
               {pending ? "Adding…" : "Add"}
             </Button>
           </DialogFooter>
