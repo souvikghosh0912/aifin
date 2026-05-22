@@ -1,9 +1,9 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Trash2 } from "lucide-react";
+import { MoreHorizontal, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -18,11 +18,15 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { removeWatchlistItem } from "@/app/(app)/watchlist/actions";
+import { NotesModal } from "@/components/watchlist/notes-modal";
 import type { Quote } from "@/lib/market/types";
+import { truncateText } from "@/lib/text";
 import { cn, formatINR, formatPercent } from "@/lib/utils";
 import type { Tables } from "@/types/database";
 
 type WatchlistItem = Tables<"watchlist_items">;
+
+const NOTES_TRUNCATE = 150;
 
 async function fetchQuotes(items: WatchlistItem[]) {
   if (items.length === 0) return {};
@@ -43,6 +47,8 @@ async function fetchQuotes(items: WatchlistItem[]) {
 export function WatchlistTable({ items }: { items: WatchlistItem[] }) {
   const router = useRouter();
   const [pending, start] = useTransition();
+  const [activeNote, setActiveNote] = useState<WatchlistItem | null>(null);
+
   const { data, isLoading } = useQuery({
     queryKey: [
       "watchlist-quotes",
@@ -76,79 +82,112 @@ export function WatchlistTable({ items }: { items: WatchlistItem[] }) {
   };
 
   return (
-    <div className="rounded-lg border bg-card">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Symbol</TableHead>
-            <TableHead className="text-right">LTP</TableHead>
-            <TableHead className="text-right">Day change</TableHead>
-            <TableHead className="text-right">Prev close</TableHead>
-            <TableHead className="w-12" />
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {items.map((item) => {
-            const key = `${item.exchange}:${item.symbol}`;
-            const raw = data?.[key];
-            const quote =
-              raw && "lastPrice" in (raw as object) ? (raw as Quote) : null;
-            return (
-              <TableRow key={item.id}>
-                <TableCell>
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium">{item.symbol}</span>
-                    <Badge variant="outline" className="text-[10px]">
-                      {item.exchange}
-                    </Badge>
-                  </div>
-                </TableCell>
-                <TableCell className="num text-right">
-                  {isLoading && !quote ? (
-                    <Skeleton className="ml-auto h-4 w-16" />
-                  ) : quote ? (
-                    formatINR(quote.lastPrice)
-                  ) : (
-                    "—"
-                  )}
-                </TableCell>
-                <TableCell
-                  className={cn(
-                    "num text-right",
-                    quote && quote.change > 0 && "text-success",
-                    quote && quote.change < 0 && "text-destructive",
-                  )}
-                >
-                  {quote ? (
-                    <>
-                      {formatINR(quote.change)}{" "}
-                      <span className="text-xs text-muted-foreground">
-                        ({formatPercent(quote.changePct)})
-                      </span>
-                    </>
-                  ) : (
-                    "—"
-                  )}
-                </TableCell>
-                <TableCell className="num text-right text-muted-foreground">
-                  {quote ? formatINR(quote.previousClose) : "—"}
-                </TableCell>
-                <TableCell>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => onRemove(item.id)}
-                    disabled={pending}
-                    aria-label="Remove from watchlist"
+    <>
+      <div className="rounded-lg border bg-card">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Symbol</TableHead>
+              <TableHead className="text-right">LTP</TableHead>
+              <TableHead className="text-right">Day change</TableHead>
+              <TableHead className="text-right">Prev close</TableHead>
+              <TableHead>Notes</TableHead>
+              <TableHead className="w-12" />
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {items.map((item) => {
+              const key = `${item.exchange}:${item.symbol}`;
+              const raw = data?.[key];
+              const quote =
+                raw && "lastPrice" in (raw as object) ? (raw as Quote) : null;
+              const { text: notesText, truncated } = truncateText(
+                item.notes,
+                NOTES_TRUNCATE,
+              );
+              return (
+                <TableRow key={item.id}>
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">{item.symbol}</span>
+                      <Badge variant="outline" className="text-[10px]">
+                        {item.exchange}
+                      </Badge>
+                    </div>
+                  </TableCell>
+                  <TableCell className="num text-right">
+                    {isLoading && !quote ? (
+                      <Skeleton className="ml-auto h-4 w-16" />
+                    ) : quote ? (
+                      formatINR(quote.lastPrice)
+                    ) : (
+                      "—"
+                    )}
+                  </TableCell>
+                  <TableCell
+                    className={cn(
+                      "num text-right",
+                      quote && quote.change > 0 && "text-success",
+                      quote && quote.change < 0 && "text-destructive",
+                    )}
                   >
-                    <Trash2 className="h-4 w-4 text-muted-foreground" />
-                  </Button>
-                </TableCell>
-              </TableRow>
-            );
-          })}
-        </TableBody>
-      </Table>
-    </div>
+                    {quote ? (
+                      <>
+                        {formatINR(quote.change)}{" "}
+                        <span className="text-xs text-muted-foreground">
+                          ({formatPercent(quote.changePct)})
+                        </span>
+                      </>
+                    ) : (
+                      "—"
+                    )}
+                  </TableCell>
+                  <TableCell className="num text-right text-muted-foreground">
+                    {quote ? formatINR(quote.previousClose) : "—"}
+                  </TableCell>
+                  <TableCell className="max-w-[40ch] align-top">
+                    {item.notes == null ? (
+                      <span className="text-muted-foreground">—</span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setActiveNote(item)}
+                        aria-label={
+                          truncated ? "Open full notes" : "Open notes"
+                        }
+                        className="line-clamp-2 text-left text-sm hover:underline focus:outline-none focus-visible:underline"
+                      >
+                        {notesText}
+                        {truncated ? (
+                          <>
+                            {" "}
+                            <MoreHorizontal
+                              className="inline h-3.5 w-3.5 align-middle text-muted-foreground"
+                              aria-hidden
+                            />
+                          </>
+                        ) : null}
+                      </button>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => onRemove(item.id)}
+                      disabled={pending}
+                      aria-label="Remove from watchlist"
+                    >
+                      <Trash2 className="h-4 w-4 text-muted-foreground" />
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </div>
+      <NotesModal item={activeNote} onClose={() => setActiveNote(null)} />
+    </>
   );
 }
