@@ -138,7 +138,6 @@ export function SymbolSearchCombobox({ onSelect, value }: Props) {
       const hasQuote = q && "lastPrice" in q;
       const change = hasQuote ? (q as Quote).changePct : null;
       const last = hasQuote ? (q as Quote).lastPrice : null;
-      const displayName = hasQuote ? (q as Quote).name : null;
       return (
         <button
           key={`${hit.exchange}:${hit.symbol}:${idx}`}
@@ -156,8 +155,8 @@ export function SymbolSearchCombobox({ onSelect, value }: Props) {
           <span className="flex min-w-0 items-center gap-2">
             <span className="font-medium">{hit.symbol}</span>
             <span className="text-[10px] text-muted-foreground">{hit.exchange}</span>
-            {displayName ? (
-              <span className="truncate text-muted-foreground">{displayName}</span>
+            {hit.name ? (
+              <span className="truncate text-muted-foreground">{hit.name}</span>
             ) : null}
           </span>
           <span className="ml-2 flex items-center gap-2 tabular-nums">

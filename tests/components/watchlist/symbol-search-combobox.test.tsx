@@ -89,7 +89,7 @@ describe("<SymbolSearchCombobox />", () => {
     await waitFor(() => {
       expect(screen.getAllByText("TCS").length).toBeGreaterThan(0);
     });
-    expect(screen.getByText(/Tata Consultancy/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Tata Consultancy/i).length).toBe(2);
   });
 
   it("calls onSelect with the chosen hit", async () => {
