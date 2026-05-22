@@ -26,7 +26,7 @@ export default function SignupPage() {
       <CardHeader>
         <CardTitle>Create your account</CardTitle>
         <CardDescription>
-          Free for personal portfolio tracking. No credit card required.
+          Free for personal portfolio tracking.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -38,7 +38,7 @@ export default function SignupPage() {
               name="display_name"
               type="text"
               autoComplete="name"
-              placeholder="Riya Sharma"
+              placeholder="Name"
             />
           </div>
           <div className="space-y-2">
