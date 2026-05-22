@@ -61,9 +61,9 @@ export default function AuthLayout({
         </header>
 
         <div className="flex flex-1 flex-col justify-center gap-5 px-6 py-10 lg:px-10">
-          <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
             What&apos;s inside
-          </h2>
+          </h3>
 
           <div className="grid grid-cols-2 overflow-hidden rounded-lg border bg-card">
             {HIGHLIGHTS.map(({ icon: Icon, title, description }, i) => (
