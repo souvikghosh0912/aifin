@@ -91,6 +91,7 @@ export interface Database {
           symbol: string;
           exchange: Exchange;
           added_at: string;
+          notes: string | null;
         };
         Insert: {
           id?: string;
@@ -98,6 +99,7 @@ export interface Database {
           symbol: string;
           exchange: Exchange;
           added_at?: string;
+          notes?: string | null;
         };
         Update: Partial<
           Database["public"]["Tables"]["watchlist_items"]["Insert"]
