@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 
 import { Input } from "@/components/ui/input";
@@ -89,11 +89,14 @@ export function SymbolSearchCombobox({ onSelect, value }: Props) {
     };
   }, [text]);
 
-  const handleSelect = (hit: SymbolSearchHit) => {
-    onSelect(hit);
-    setText(hit.symbol);
-    setOpen(false);
-  };
+  const handleSelect = useCallback(
+    (hit: SymbolSearchHit) => {
+      onSelect(hit);
+      setText(hit.symbol);
+      setOpen(false);
+    },
+    [onSelect],
+  );
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (!open || hits.length === 0) return;
@@ -185,7 +188,7 @@ export function SymbolSearchCombobox({ onSelect, value }: Props) {
         </button>
       );
     });
-  }, [error, hits, highlight, loading, quotes]);
+  }, [error, hits, highlight, loading, quotes, handleSelect]);
 
   return (
     <Popover open={showList} onOpenChange={setOpen}>
