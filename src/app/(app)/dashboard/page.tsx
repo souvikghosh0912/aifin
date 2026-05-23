@@ -5,6 +5,7 @@ import { InvestedChart, type PnlPoint } from "@/components/charts/invested-chart
 import { AddTransactionDialog } from "@/components/portfolio/add-transaction-dialog";
 import { Card, CardContent } from "@/components/ui/card";
 import { createClient } from "@/lib/supabase/server";
+import { coerceHolding } from "@/lib/portfolio/calc";
 import { formatINR } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -23,15 +24,18 @@ export default async function DashboardPage() {
       .limit(500),
   ]);
 
-  const holdings = holdingsResult.data ?? [];
+  const holdings = (holdingsResult.data ?? []).map(coerceHolding);
   const transactions = transactionsResult.data ?? [];
 
-  // Build a cumulative-invested series for the chart
+  // Build a cumulative-invested series for the chart. The transaction fields
+  // come back from Postgres `numeric` as strings — coerce before arithmetic.
   const series: PnlPoint[] = [];
   let cum = 0;
   for (const tx of transactions) {
-    const flow =
-      (tx.side === "BUY" ? 1 : -1) * (tx.quantity * tx.price) + tx.fees;
+    const qty = Number(tx.quantity);
+    const price = Number(tx.price);
+    const fees = Number(tx.fees);
+    const flow = (tx.side === "BUY" ? 1 : -1) * (qty * price) + fees;
     cum += flow;
     series.push({
       date: new Date(tx.traded_at).toLocaleDateString("en-IN", {

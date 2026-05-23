@@ -1,5 +1,6 @@
 import { HoldingsTable } from "@/components/portfolio/holdings-table";
 import { AddTransactionDialog } from "@/components/portfolio/add-transaction-dialog";
+import { coerceHolding } from "@/lib/portfolio/calc";
 import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -10,6 +11,8 @@ export default async function HoldingsPage() {
     .from("holdings_view")
     .select("*")
     .order("invested_value", { ascending: false });
+
+  const coerced = (holdings ?? []).map(coerceHolding);
 
   return (
     <div className="space-y-6">
@@ -22,7 +25,7 @@ export default async function HoldingsPage() {
         </div>
         <AddTransactionDialog />
       </div>
-      <HoldingsTable holdings={holdings ?? []} />
+      <HoldingsTable holdings={coerced} />
     </div>
   );
 }

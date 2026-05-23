@@ -3,8 +3,20 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/market/top-gainers", () => ({
   getTopGainers: async () => [
-    { symbol: "ADANIENT", name: "Adani Ent", lastPrice: 2400, changePct: 4.21 },
-    { symbol: "TATASTEEL", name: "Tata Steel", lastPrice: 140, changePct: 3.18 },
+    {
+      symbol: "ADANIENT",
+      name: "Adani Ent",
+      lastPrice: 2400,
+      change: 96.86,
+      changePct: 4.21,
+    },
+    {
+      symbol: "TATASTEEL",
+      name: "Tata Steel",
+      lastPrice: 140,
+      change: 4.32,
+      changePct: 3.18,
+    },
   ],
 }));
 

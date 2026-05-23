@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Area,
   AreaChart,
@@ -25,12 +25,41 @@ interface Props {
 
 const RANGES: Range[] = ["1M", "3M", "6M", "1Y"];
 
+const SHORT_DATE = new Intl.DateTimeFormat("en-IN", {
+  month: "short",
+  day: "numeric",
+});
+
+function formatTick(dateStr: string): string {
+  const d = new Date(dateStr);
+  if (!Number.isFinite(d.getTime())) return dateStr;
+  return SHORT_DATE.format(d);
+}
+
 export function TimeframeChart({ initial, symbol, exchange }: Props) {
   const [range, setRange] = useState<Range>("3M");
   const [candles, setCandles] = useState<HistoricalCandle[]>(initial);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+
+  const trend = useMemo(() => {
+    if (candles.length < 2) return "flat" as const;
+    const first = candles[0]!.close;
+    const last = candles[candles.length - 1]!.close;
+    if (last > first) return "up" as const;
+    if (last < first) return "down" as const;
+    return "flat" as const;
+  }, [candles]);
+
+  // Map trend → chart token. Up = success green, down = destructive red,
+  // flat = muted foreground.
+  const stroke =
+    trend === "up"
+      ? "hsl(var(--success))"
+      : trend === "down"
+        ? "hsl(var(--destructive))"
+        : "hsl(var(--muted-foreground))";
 
   async function selectRange(next: Range) {
     if (next === range && !error) return;
@@ -64,26 +93,28 @@ export function TimeframeChart({ initial, symbol, exchange }: Props) {
   }, []);
 
   return (
-    <div className="space-y-2">
-      <div className="flex gap-1 text-xs">
-        {RANGES.map((r) => (
-          <button
-            key={r}
-            type="button"
-            data-active={r === range}
-            onClick={() => selectRange(r)}
-            className={cn(
-              "rounded px-2.5 py-1 font-medium text-muted-foreground hover:bg-accent hover:text-foreground",
-              r === range && "bg-accent text-foreground",
-            )}
-          >
-            {r}
-          </button>
-        ))}
+    <div className="overflow-hidden rounded-lg border bg-card">
+      <div className="flex items-center justify-between gap-2 border-b px-3 py-2">
+        <div className="flex items-center gap-0.5 text-xs">
+          {RANGES.map((r) => (
+            <button
+              key={r}
+              type="button"
+              data-active={r === range}
+              onClick={() => selectRange(r)}
+              className={cn(
+                "rounded px-2.5 py-1 font-semibold text-muted-foreground transition-colors hover:bg-accent hover:text-foreground",
+                r === range && "bg-accent text-foreground",
+              )}
+            >
+              {r}
+            </button>
+          ))}
+        </div>
+        <FullChartStub />
       </div>
 
-      <div className="relative h-80 rounded-lg border bg-card p-3">
-        <FullChartStub className="absolute right-2 top-2 z-10" />
+      <div className="relative h-[440px] p-3 md:h-[520px]">
         {loading ? (
           <Skeleton className="h-full w-full" />
         ) : error ? (
@@ -103,45 +134,66 @@ export function TimeframeChart({ initial, symbol, exchange }: Props) {
           </div>
         ) : (
           <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={candles} margin={{ left: 0, right: 8, top: 8, bottom: 0 }}>
+            <AreaChart
+              data={candles}
+              margin={{ left: 0, right: 0, top: 12, bottom: 0 }}
+            >
               <defs>
                 <linearGradient id="stockGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="hsl(var(--chart-1))" stopOpacity={0.4} />
-                  <stop offset="95%" stopColor="hsl(var(--chart-1))" stopOpacity={0} />
+                  <stop offset="0%" stopColor={stroke} stopOpacity={0.22} />
+                  <stop offset="100%" stopColor={stroke} stopOpacity={0} />
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+              <CartesianGrid
+                stroke="hsl(var(--border))"
+                strokeOpacity={0.6}
+                vertical={false}
+              />
               <XAxis
                 dataKey="date"
                 stroke="hsl(var(--muted-foreground))"
-                fontSize={11}
+                fontSize={10}
+                tickMargin={8}
                 tickLine={false}
                 axisLine={false}
+                tickFormatter={formatTick}
+                minTickGap={36}
               />
               <YAxis
+                orientation="right"
                 stroke="hsl(var(--muted-foreground))"
-                fontSize={11}
+                fontSize={10}
+                tickMargin={6}
                 tickLine={false}
                 axisLine={false}
+                width={56}
                 tickFormatter={(v: number) => formatINR(v, { compact: true })}
                 domain={["auto", "auto"]}
               />
               <Tooltip
+                cursor={{
+                  stroke: "hsl(var(--muted-foreground))",
+                  strokeDasharray: "3 3",
+                  strokeOpacity: 0.5,
+                }}
                 contentStyle={{
                   backgroundColor: "hsl(var(--popover))",
                   border: "1px solid hsl(var(--border))",
                   borderRadius: "var(--radius)",
                   fontSize: 12,
+                  padding: "6px 8px",
                 }}
-                formatter={(v: number) => formatINR(v)}
+                labelFormatter={(label: string) => formatTick(label)}
+                formatter={(v: number) => [formatINR(v), "Close"]}
               />
               <Area
                 type="monotone"
                 dataKey="close"
-                stroke="hsl(var(--chart-1))"
-                fillOpacity={1}
+                stroke={stroke}
+                strokeWidth={1.75}
                 fill="url(#stockGrad)"
-                strokeWidth={2}
+                fillOpacity={1}
+                activeDot={{ r: 4, strokeWidth: 0, fill: stroke }}
               />
             </AreaChart>
           </ResponsiveContainer>

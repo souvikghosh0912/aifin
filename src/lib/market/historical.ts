@@ -1,19 +1,12 @@
 import "server-only";
-import path from "node:path";
-import os from "node:os";
 
 import { createServiceClient } from "@/lib/supabase/server";
 import type { Exchange } from "@/types/database";
 
 import { nseBucket } from "./rate-limit";
 import { normalizeSymbol } from "./symbols";
-import {
-  MarketDataError,
-  type HistoricalCandle,
-  type Range,
-} from "./types";
-
-/* eslint-disable @typescript-eslint/no-explicit-any */
+import { type HistoricalCandle, type Range } from "./types";
+import { fetchHistoricalYahoo } from "./yahoo";
 
 const MEM_TTL_MS = 5 * 60_000;
 const DB_TTL_MS = 60 * 60_000;
@@ -42,19 +35,6 @@ export function rangeToDays(range: Range): number {
     case "1Y":
       return 365;
   }
-}
-
-let _nse: any = null;
-async function getNse(): Promise<any> {
-  if (_nse) return _nse;
-  const mod: any = await import("nse-bse-api");
-  const NSE = mod.NSE ?? mod.default?.NSE;
-  if (!NSE) throw new MarketDataError("nse-bse-api: NSE export not found");
-  _nse = new NSE(
-    path.join(os.tmpdir(), "ai-finance-dashboard", "nse-bse-api", "nse"),
-    { timeout: 10_000 },
-  );
-  return _nse;
 }
 
 function memGet(k: string): HistoricalCandle[] | null {
@@ -120,41 +100,11 @@ async function dbSet(
   }
 }
 
-function num(v: unknown): number | null {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : null;
-}
-
-function dateStr(v: unknown): string | null {
-  if (typeof v !== "string" || v.trim() === "") return null;
-  const d = new Date(v);
-  if (Number.isNaN(d.getTime())) return null;
-  return d.toISOString().slice(0, 10);
-}
-
-function normalizeRow(raw: any): HistoricalCandle | null {
-  const date = dateStr(
-    raw.CH_TIMESTAMP ?? raw.mTIMESTAMP ?? raw.date ?? raw.timestamp,
-  );
-  const close = num(raw.CH_CLOSING_PRICE ?? raw.close);
-  if (!date || close == null) return null;
-  return {
-    date,
-    open: num(raw.CH_OPENING_PRICE ?? raw.open) ?? close,
-    high: num(raw.CH_TRADE_HIGH_PRICE ?? raw.high) ?? close,
-    low: num(raw.CH_TRADE_LOW_PRICE ?? raw.low) ?? close,
-    close,
-    volume: num(raw.CH_TOT_TRADED_QTY ?? raw.volume) ?? 0,
-  };
-}
-
 export async function getHistorical(
   symbol: string,
   exchange: Exchange,
   range: Range,
 ): Promise<HistoricalCandle[]> {
-  if (exchange === "BSE") return [];
-
   const sym = normalizeSymbol(symbol);
   const k = key(sym, exchange, range);
 
@@ -172,23 +122,10 @@ export async function getHistorical(
         return fromDb;
       }
       await nseBucket.acquire();
-      const nse = await getNse();
-      const days = rangeToDays(range);
-      const to = new Date();
-      const from = new Date(Date.now() - days * 86_400_000);
-      const raw = await nse.fetchEquityHistoricalData({
-        symbol: sym,
-        from_date: from,
-        to_date: to,
-      });
-      const list: any[] = Array.isArray(raw) ? raw : [];
-      const normalized = list
-        .map(normalizeRow)
-        .filter((c): c is HistoricalCandle => c !== null)
-        .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
-      memSet(k, normalized);
-      void dbSet(sym, exchange, range, normalized);
-      return normalized;
+      const candles = await fetchHistoricalYahoo(sym, exchange, range);
+      memSet(k, candles);
+      void dbSet(sym, exchange, range, candles);
+      return candles;
     } finally {
       inflight.delete(k);
     }

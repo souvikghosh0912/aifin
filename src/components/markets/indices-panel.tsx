@@ -5,7 +5,12 @@ import { getIndices } from "@/lib/market/nse";
 import { cn, formatNumber, formatPercent } from "@/lib/utils";
 
 export async function IndicesPanel() {
-  const indices = await getIndices();
+  let indices: Awaited<ReturnType<typeof getIndices>> = [];
+  try {
+    indices = await getIndices();
+  } catch (err) {
+    console.error("[indices-panel] getIndices failed:", err);
+  }
   if (indices.length === 0) {
     return (
       <Card>

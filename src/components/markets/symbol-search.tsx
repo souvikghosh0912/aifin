@@ -24,22 +24,35 @@ export function SymbolSearch() {
   const [q, setQ] = useState("");
   const [hits, setHits] = useState<SymbolSearchHit[]>([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const debounced = useDebounced(q, 250);
 
   useEffect(() => {
     let cancelled = false;
     if (!debounced.trim()) {
       setHits([]);
+      setError(null);
       return;
     }
     setLoading(true);
+    setError(null);
     fetch(`/api/search?q=${encodeURIComponent(debounced)}`)
-      .then((r) => r.json())
-      .then((j: { hits?: SymbolSearchHit[] }) => {
-        if (!cancelled) setHits(j.hits ?? []);
+      .then(async (r) => {
+        const body = (await r.json().catch(() => null)) as
+          | { hits?: SymbolSearchHit[]; error?: string }
+          | null;
+        if (cancelled) return;
+        if (!r.ok || body?.error) {
+          setHits([]);
+          setError("Search is temporarily unavailable. Try again in a moment.");
+          return;
+        }
+        setHits(body?.hits ?? []);
       })
       .catch(() => {
-        if (!cancelled) setHits([]);
+        if (cancelled) return;
+        setHits([]);
+        setError("Search is temporarily unavailable. Try again in a moment.");
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -71,6 +84,10 @@ export function SymbolSearch() {
                   <Skeleton key={i} className="h-9 w-full" />
                 ))}
               </div>
+            ) : error ? (
+              <p className="px-3 py-6 text-center text-sm text-destructive">
+                {error}
+              </p>
             ) : hits.length === 0 ? (
               <p className="px-3 py-6 text-center text-sm text-muted-foreground">
                 No matches for &quot;{debounced}&quot;.

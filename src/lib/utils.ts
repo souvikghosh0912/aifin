@@ -28,25 +28,38 @@ const PERCENT_FORMATTER = new Intl.NumberFormat("en-IN", {
   maximumFractionDigits: 2,
 });
 
-export function formatINR(value: number, opts?: { compact?: boolean }): string {
-  if (!Number.isFinite(value)) return "—";
+// Postgres `numeric` columns arrive as strings from supabase-js; accept those
+// here too so direct `formatINR(row.something)` calls don't render as "—".
+type Numeric = number | string | null | undefined;
+
+function toNum(v: Numeric): number {
+  if (v == null) return NaN;
+  return typeof v === "number" ? v : Number(v);
+}
+
+export function formatINR(value: Numeric, opts?: { compact?: boolean }): string {
+  const n = toNum(value);
+  if (!Number.isFinite(n)) return "—";
   return opts?.compact
-    ? INR_COMPACT_FORMATTER.format(value)
-    : INR_FORMATTER.format(value);
+    ? INR_COMPACT_FORMATTER.format(n)
+    : INR_FORMATTER.format(n);
 }
 
-export function formatNumber(value: number): string {
-  if (!Number.isFinite(value)) return "—";
-  return NUMBER_FORMATTER.format(value);
+export function formatNumber(value: Numeric): string {
+  const n = toNum(value);
+  if (!Number.isFinite(n)) return "—";
+  return NUMBER_FORMATTER.format(n);
 }
 
-export function formatPercent(value: number): string {
-  if (!Number.isFinite(value)) return "—";
-  return PERCENT_FORMATTER.format(value / 100);
+export function formatPercent(value: Numeric): string {
+  const n = toNum(value);
+  if (!Number.isFinite(n)) return "—";
+  return PERCENT_FORMATTER.format(n / 100);
 }
 
-export function signed(value: number): string {
-  if (!Number.isFinite(value)) return "—";
-  const sign = value > 0 ? "+" : "";
-  return `${sign}${value.toFixed(2)}`;
+export function signed(value: Numeric): string {
+  const n = toNum(value);
+  if (!Number.isFinite(n)) return "—";
+  const sign = n > 0 ? "+" : "";
+  return `${sign}${n.toFixed(2)}`;
 }

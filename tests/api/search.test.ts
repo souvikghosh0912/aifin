@@ -57,4 +57,18 @@ describe("GET /api/search", () => {
     await GET(req("http://localhost/api/search?q=%20%20tcs%20%20"));
     expect(searchSymbols).toHaveBeenCalledWith("tcs");
   });
+
+  // Regression: searchSymbols used to swallow upstream errors and return [],
+  // which the UI rendered as "no matches for {q}" — indistinguishable from a
+  // genuine no-results outcome. The route now returns 502 with an error body
+  // so the client can show a real failure message.
+  it("returns 502 with an error body when searchSymbols throws", async () => {
+    searchSymbols.mockRejectedValue(new Error("upstream timed out"));
+    const GET = await getRoute();
+    const res = await GET(req("http://localhost/api/search?q=reli"));
+    expect(res.status).toBe(502);
+    const body = await res.json();
+    expect(body.error).toBe("search_unavailable");
+    expect(body.message).toContain("upstream timed out");
+  });
 });

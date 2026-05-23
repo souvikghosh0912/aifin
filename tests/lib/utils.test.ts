@@ -38,6 +38,21 @@ describe("formatINR", () => {
     expect(formatINR(NaN)).toBe("—");
     expect(formatINR(Infinity)).toBe("—");
   });
+
+  // Regression: Postgres `numeric` arrives as a string from supabase-js. Direct
+  // renders like `formatINR(row.holding.avg_cost)` must not show "—" for a
+  // perfectly valid numeric string.
+  it("accepts numeric strings (Postgres numeric from supabase-js)", () => {
+    const out = formatINR("1234.5" as unknown as number);
+    expect(out).toContain("1,234.5");
+    expect(out).toContain("₹");
+  });
+
+  it("returns em-dash for unparseable strings, null, and undefined", () => {
+    expect(formatINR("abc" as unknown as number)).toBe("—");
+    expect(formatINR(null as unknown as number)).toBe("—");
+    expect(formatINR(undefined as unknown as number)).toBe("—");
+  });
 });
 
 describe("formatNumber", () => {

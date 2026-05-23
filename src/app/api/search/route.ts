@@ -10,6 +10,15 @@ export async function GET(request: NextRequest) {
   if (q.length > 40) {
     return NextResponse.json({ error: "query_too_long" }, { status: 400 });
   }
-  const hits = await searchSymbols(q);
-  return NextResponse.json({ hits });
+  try {
+    const hits = await searchSymbols(q);
+    return NextResponse.json({ hits });
+  } catch (err) {
+    console.error("[api/search] searchSymbols failed:", err);
+    const message = err instanceof Error ? err.message : "search_failed";
+    return NextResponse.json(
+      { error: "search_unavailable", message },
+      { status: 502 },
+    );
+  }
 }

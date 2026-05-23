@@ -195,6 +195,85 @@ describe("computeTotals", () => {
       realizedPnl: 0,
     });
   });
+
+  // Regression: Postgres `numeric` columns come back from supabase-js as JSON
+  // strings, but the generated TS type declares them `number`. Before the fix,
+  // `reduce((s, h) => s + h.invested_value, 0)` did string concatenation:
+  // 0 + "1000.00" → "01000.00", then "01000.00" + "1000.00" → "01000.001000.00"
+  // (two dots → NaN), so Total P/L rendered as "—". Coercion in enrichHoldings
+  // and computeTotals should make this a real number.
+  it("coerces numeric-string fields from the holdings_view (supabase numeric bug)", () => {
+    const holdings = [
+      {
+        user_id: "u",
+        portfolio_id: "p",
+        symbol: "A",
+        exchange: "NSE" as const,
+        quantity: "10" as unknown as number,
+        avg_cost: "100" as unknown as number,
+        invested_value: "1000.00" as unknown as number,
+        realized_pnl: "50.00" as unknown as number,
+      },
+      {
+        user_id: "u",
+        portfolio_id: "p",
+        symbol: "B",
+        exchange: "NSE" as const,
+        quantity: "5" as unknown as number,
+        avg_cost: "200" as unknown as number,
+        invested_value: "1000.00" as unknown as number,
+        realized_pnl: "-10.00" as unknown as number,
+      },
+    ];
+    const enriched = enrichHoldings(holdings, {
+      "NSE:A": quote({ symbol: "A", lastPrice: 110, previousClose: 105 }),
+      "NSE:B": quote({ symbol: "B", lastPrice: 250, previousClose: 240 }),
+    });
+    const totals = computeTotals(enriched, holdings);
+
+    expect(Number.isFinite(totals.invested)).toBe(true);
+    expect(Number.isFinite(totals.marketValue)).toBe(true);
+    expect(Number.isFinite(totals.unrealizedPnl)).toBe(true);
+    expect(Number.isFinite(totals.realizedPnl)).toBe(true);
+    expect(totals.invested).toBe(2000);
+    expect(totals.marketValue).toBe(2350);
+    expect(totals.unrealizedPnl).toBe(350);
+    expect(totals.realizedPnl).toBe(40);
+  });
+
+  it("computes correct totals when quotes are missing and inputs are numeric strings", () => {
+    // When the upstream quote API is down, every quote is missing and the
+    // null-quote branch falls back to marketValue = invested_value. Total P/L
+    // should be exactly 0 — not NaN, not "—".
+    const holdings = [
+      {
+        user_id: "u",
+        portfolio_id: "p",
+        symbol: "A",
+        exchange: "NSE" as const,
+        quantity: "10" as unknown as number,
+        avg_cost: "100" as unknown as number,
+        invested_value: "1000.00" as unknown as number,
+        realized_pnl: "0" as unknown as number,
+      },
+      {
+        user_id: "u",
+        portfolio_id: "p",
+        symbol: "B",
+        exchange: "NSE" as const,
+        quantity: "5" as unknown as number,
+        avg_cost: "200" as unknown as number,
+        invested_value: "1000.00" as unknown as number,
+        realized_pnl: "0" as unknown as number,
+      },
+    ];
+    const enriched = enrichHoldings(holdings, {});
+    const totals = computeTotals(enriched, holdings);
+
+    expect(totals.invested).toBe(2000);
+    expect(totals.marketValue).toBe(2000);
+    expect(totals.unrealizedPnl).toBe(0);
+  });
 });
 
 describe("computeAllocation", () => {

@@ -4,6 +4,35 @@ import type { Tables, Views } from "@/types/database";
 type Transaction = Tables<"transactions">;
 type Holding = Views<"holdings_view">;
 
+// Postgres `numeric` columns come back from supabase-js as JSON strings
+// (the TS types in database.ts say `number`, but at runtime they're "5000.00").
+// `+` between a number and a numeric string concatenates, which is what was
+// breaking the totals reduce — coerce on the way into arithmetic.
+function n(v: number | string | null | undefined): number {
+  if (v == null) return 0;
+  const x = typeof v === "number" ? v : Number(v);
+  return Number.isFinite(x) ? x : 0;
+}
+
+export function coerceHolding(h: Holding): Holding {
+  return {
+    ...h,
+    quantity: n(h.quantity),
+    avg_cost: n(h.avg_cost),
+    invested_value: n(h.invested_value),
+    realized_pnl: n(h.realized_pnl),
+  };
+}
+
+export function coerceTransaction(tx: Transaction): Transaction {
+  return {
+    ...tx,
+    quantity: n(tx.quantity),
+    price: n(tx.price),
+    fees: n(tx.fees),
+  };
+}
+
 /**
  * Compute weighted-average holdings from a list of transactions.
  * Useful when the DB view isn't available (e.g., client-side previews).
@@ -24,7 +53,8 @@ export function computeHoldings(transactions: Transaction[]): Holding[] {
     }
   >();
 
-  for (const tx of transactions) {
+  for (const txRaw of transactions) {
+    const tx = coerceTransaction(txRaw);
     const key = `${tx.portfolio_id}:${tx.exchange}:${tx.symbol}`;
     const cur = acc.get(key) ?? {
       user_id: tx.user_id,
@@ -81,7 +111,8 @@ export function enrichHoldings(
   holdings: Holding[],
   quotes: Record<string, Quote | { error: string } | undefined>,
 ): HoldingWithMarket[] {
-  return holdings.map((h) => {
+  return holdings.map((h0) => {
+    const h = coerceHolding(h0);
     const key = `${h.exchange}:${h.symbol}`;
     const raw = quotes[key];
     const quote =
@@ -136,7 +167,7 @@ export function computeTotals(
   const dayChange = enriched.reduce((s, h) => s + h.dayChange, 0);
   const previousValue = marketValue - dayChange;
   const dayChangePct = previousValue > 0 ? (dayChange / previousValue) * 100 : 0;
-  const realizedPnl = holdings.reduce((s, h) => s + h.realized_pnl, 0);
+  const realizedPnl = holdings.reduce((s, h) => s + n(h.realized_pnl), 0);
   return {
     invested,
     marketValue,

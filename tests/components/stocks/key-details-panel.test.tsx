@@ -62,7 +62,7 @@ describe("<KeyDetailsPanel />", () => {
       meta: { ...meta, marketCap: null },
     });
     render(Tree);
-    const dt = screen.getByText("Mkt cap");
+    const dt = screen.getByText("Market capitalization");
     // Adjacent <dd> sibling holds the value
     const dd = dt.nextElementSibling as HTMLElement;
     expect(dd).toHaveTextContent("—");

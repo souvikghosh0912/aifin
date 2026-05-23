@@ -1,54 +1,41 @@
 import "server-only";
-import path from "node:path";
-import os from "node:os";
 
-import { nseBucket } from "./rate-limit";
-import { MarketDataError, type TopMover } from "./types";
-
-/* eslint-disable @typescript-eslint/no-explicit-any */
+import { type TopMover } from "./types";
+import { fetchSparkYahoo } from "./yahoo";
 
 const TTL_MS = 60_000;
 let cache: { value: TopMover[]; expiresAt: number } | null = null;
 
-let _nse: any = null;
-async function getNse(): Promise<any> {
-  if (_nse) return _nse;
-  const mod: any = await import("nse-bse-api");
-  const NSE = mod.NSE ?? mod.default?.NSE;
-  if (!NSE) throw new MarketDataError("nse-bse-api: NSE export not found");
-  _nse = new NSE(
-    path.join(os.tmpdir(), "ai-finance-dashboard", "nse-bse-api", "nse"),
-    { timeout: 10_000 },
-  );
-  return _nse;
-}
-
-function num(v: unknown): number {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : 0;
-}
+// Static Nifty 50 constituents. Maintained by hand — adjust if NSE rebalances
+// the index. We pull live prices for the whole list via a single Yahoo spark
+// call and pick the top movers by % change. Avoiding a 50-way fan-out keeps
+// the request cheap (one HTTP call) and uniformly rate-limited.
+const NIFTY_50: string[] = [
+  "RELIANCE", "TCS", "HDFCBANK", "ICICIBANK", "INFY",
+  "ITC", "KOTAKBANK", "LT", "AXISBANK", "SBIN",
+  "HINDUNILVR", "BHARTIARTL", "BAJFINANCE", "BAJAJFINSV", "HCLTECH",
+  "ASIANPAINT", "MARUTI", "TITAN", "SUNPHARMA", "ULTRACEMCO",
+  "NESTLEIND", "ONGC", "NTPC", "TATAMOTORS", "JSWSTEEL",
+  "POWERGRID", "TATASTEEL", "INDUSINDBK", "COALINDIA", "ADANIENT",
+  "GRASIM", "HEROMOTOCO", "BPCL", "CIPLA", "BRITANNIA",
+  "DIVISLAB", "ADANIPORTS", "EICHERMOT", "APOLLOHOSP", "HINDALCO",
+  "DRREDDY", "TECHM", "WIPRO", "TATACONSUM", "SBILIFE",
+  "HDFCLIFE", "TRENT", "SHRIRAMFIN", "LTIM", "ADANIGREEN",
+];
 
 export async function getTopGainers(): Promise<TopMover[]> {
   if (cache && cache.expiresAt > Date.now()) return cache.value;
 
   try {
-    await nseBucket.acquire();
-    const nse = await getNse();
-    const raw: any = await nse.listEquityStocksByIndex("NIFTY 50");
-    const list: any[] = Array.isArray(raw)
-      ? raw
-      : Array.isArray(raw?.data)
-        ? raw.data
-        : [];
-
-    const movers: TopMover[] = list
-      .map((r) => ({
-        symbol: String(r.symbol ?? r.SYMBOL ?? "").toUpperCase(),
-        name: r.meta?.companyName ?? r.companyName ?? r.name ?? null,
-        lastPrice: num(r.lastPrice ?? r.last ?? r.ltp),
-        changePct: num(r.pChange ?? r.percentChange),
+    const sparks = await fetchSparkYahoo(NIFTY_50, "NSE");
+    const movers: TopMover[] = sparks
+      .map((s) => ({
+        symbol: s.symbol,
+        name: null,
+        lastPrice: s.lastPrice,
+        change: s.change,
+        changePct: s.changePct,
       }))
-      .filter((m) => m.symbol.length > 0)
       .sort((a, b) => b.changePct - a.changePct)
       .slice(0, 20);
 

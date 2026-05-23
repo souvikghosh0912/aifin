@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { HistoricalCandle } from "@/lib/market/types";
 
 async function loadHistorical(opts?: {
-  upstream?: (symbol: string, from: Date, to: Date) => Promise<unknown[]>;
+  fetcher?: (symbol: string, exchange: string, range: string) => Promise<HistoricalCandle[]>;
   dbRow?: { payload: HistoricalCandle[]; fetched_at: string } | null;
 }) {
   vi.resetModules();
@@ -11,30 +11,15 @@ async function loadHistorical(opts?: {
     nseBucket: { acquire: async () => {} },
   }));
 
-  const upstream =
-    opts?.upstream ??
-    (async () => [
-      {
-        CH_TIMESTAMP: "2026-04-01",
-        CH_OPENING_PRICE: 100,
-        CH_TRADE_HIGH_PRICE: 105,
-        CH_TRADE_LOW_PRICE: 99,
-        CH_CLOSING_PRICE: 104,
-        CH_TOT_TRADED_QTY: 1000,
-      },
-    ]);
+  const defaultFetcher = async (): Promise<HistoricalCandle[]> => [
+    { date: "2026-04-01", open: 100, high: 105, low: 99, close: 104, volume: 1000 },
+  ];
 
-  vi.doMock("nse-bse-api", () => ({
-    NSE: class {
-      async fetchEquityHistoricalData(p: {
-        symbol: string;
-        from_date: Date;
-        to_date: Date;
-      }) {
-        return upstream(p.symbol, p.from_date, p.to_date);
-      }
-    },
-    BSE: class {},
+  const fetcher = opts?.fetcher ?? defaultFetcher;
+
+  vi.doMock("@/lib/market/yahoo", () => ({
+    fetchHistoricalYahoo: (symbol: string, exchange: string, range: string) =>
+      fetcher(symbol, exchange, range),
   }));
 
   const dbRow = opts?.dbRow ?? null;
@@ -73,89 +58,45 @@ describe("getHistorical", () => {
     vi.resetModules();
   });
 
-  it("returns BSE as empty (no upstream available)", async () => {
-    const upstream = vi.fn(async () => [
-      { CH_TIMESTAMP: "2026-04-01", CH_CLOSING_PRICE: 100 },
+  it("fetches BSE history from upstream (Yahoo supports .BO symbols)", async () => {
+    const fetcher = vi.fn(async () => [
+      { date: "2026-04-01", open: 100, high: 105, low: 99, close: 104, volume: 1000 },
     ]);
-    const { getHistorical } = await loadHistorical({ upstream });
+    const { getHistorical } = await loadHistorical({ fetcher });
     const out = await getHistorical("RELIANCE", "BSE", "3M");
-    expect(out).toEqual([]);
-    expect(upstream).not.toHaveBeenCalled();
+    expect(out).toHaveLength(1);
+    expect(fetcher).toHaveBeenCalledOnce();
+    expect(fetcher).toHaveBeenCalledWith("RELIANCE", "BSE", "3M");
   });
 
-  it("calls upstream once and sorts ascending by date", async () => {
-    const upstream = vi.fn(async () => [
-      {
-        CH_TIMESTAMP: "2026-04-03",
-        CH_OPENING_PRICE: 102,
-        CH_TRADE_HIGH_PRICE: 106,
-        CH_TRADE_LOW_PRICE: 100,
-        CH_CLOSING_PRICE: 105,
-        CH_TOT_TRADED_QTY: 1100,
-      },
-      {
-        CH_TIMESTAMP: "2026-04-01",
-        CH_OPENING_PRICE: 100,
-        CH_TRADE_HIGH_PRICE: 105,
-        CH_TRADE_LOW_PRICE: 99,
-        CH_CLOSING_PRICE: 104,
-        CH_TOT_TRADED_QTY: 1000,
-      },
+  it("calls upstream once and returns its candles", async () => {
+    const fetcher = vi.fn(async () => [
+      { date: "2026-04-01", open: 100, high: 105, low: 99, close: 104, volume: 1000 },
+      { date: "2026-04-03", open: 102, high: 106, low: 100, close: 105, volume: 1100 },
     ]);
-    const { getHistorical } = await loadHistorical({ upstream });
+    const { getHistorical } = await loadHistorical({ fetcher });
     const out = await getHistorical("RELIANCE", "NSE", "1M");
     expect(out.map((c) => c.date)).toEqual(["2026-04-01", "2026-04-03"]);
-    expect(upstream).toHaveBeenCalledTimes(1);
+    expect(fetcher).toHaveBeenCalledTimes(1);
   });
 
   it("serves a warm memory hit without calling upstream", async () => {
-    const upstream = vi.fn(async () => [
-      {
-        CH_TIMESTAMP: "2026-04-01",
-        CH_CLOSING_PRICE: 100,
-        CH_OPENING_PRICE: 100,
-        CH_TRADE_HIGH_PRICE: 100,
-        CH_TRADE_LOW_PRICE: 100,
-        CH_TOT_TRADED_QTY: 0,
-      },
+    const fetcher = vi.fn(async () => [
+      { date: "2026-04-01", open: 100, high: 100, low: 100, close: 100, volume: 0 },
     ]);
-    const { getHistorical } = await loadHistorical({ upstream });
+    const { getHistorical } = await loadHistorical({ fetcher });
     await getHistorical("TCS", "NSE", "3M");
     await getHistorical("TCS", "NSE", "3M");
-    expect(upstream).toHaveBeenCalledTimes(1);
+    expect(fetcher).toHaveBeenCalledTimes(1);
   });
 
   it("differentiates by range key", async () => {
-    const upstream = vi.fn(async () => [
-      {
-        CH_TIMESTAMP: "2026-04-01",
-        CH_CLOSING_PRICE: 100,
-        CH_OPENING_PRICE: 100,
-        CH_TRADE_HIGH_PRICE: 100,
-        CH_TRADE_LOW_PRICE: 100,
-        CH_TOT_TRADED_QTY: 0,
-      },
+    const fetcher = vi.fn(async () => [
+      { date: "2026-04-01", open: 100, high: 100, low: 100, close: 100, volume: 0 },
     ]);
-    const { getHistorical } = await loadHistorical({ upstream });
+    const { getHistorical } = await loadHistorical({ fetcher });
     await getHistorical("INFY", "NSE", "1M");
     await getHistorical("INFY", "NSE", "3M");
-    expect(upstream).toHaveBeenCalledTimes(2);
-  });
-
-  it("skips rows missing a closing price", async () => {
-    const upstream = vi.fn(async () => [
-      {
-        CH_TIMESTAMP: "2026-04-01",
-        CH_CLOSING_PRICE: 100,
-        CH_OPENING_PRICE: 100,
-        CH_TRADE_HIGH_PRICE: 100,
-        CH_TRADE_LOW_PRICE: 100,
-        CH_TOT_TRADED_QTY: 0,
-      },
-      { CH_TIMESTAMP: "2026-04-02", CH_CLOSING_PRICE: null },
-    ]);
-    const { getHistorical } = await loadHistorical({ upstream });
-    const out = await getHistorical("WIPRO", "NSE", "1M");
-    expect(out).toHaveLength(1);
+    expect(fetcher).toHaveBeenCalledTimes(2);
   });
 });

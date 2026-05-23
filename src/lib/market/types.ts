@@ -49,6 +49,7 @@ export interface TopMover {
   symbol: string;
   name: string | null;
   lastPrice: number;
+  change: number;
   changePct: number;
 }
 
