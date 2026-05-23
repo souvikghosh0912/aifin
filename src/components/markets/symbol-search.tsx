@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import type { Route } from "next";
 import { Search } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -76,23 +78,27 @@ export function SymbolSearch() {
             ) : (
               <ul className="divide-y">
                 {hits.map((h) => (
-                  <li
-                    key={`${h.exchange}:${h.symbol}`}
-                    className="flex items-center justify-between px-3 py-2"
-                  >
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium">{h.symbol}</span>
-                        <Badge variant="outline" className="text-[10px]">
-                          {h.exchange}
-                        </Badge>
+                  <li key={`${h.exchange}:${h.symbol}`}>
+                    <Link
+                      href={
+                        `/stocks/${encodeURIComponent(h.symbol)}?exchange=${h.exchange}` as Route
+                      }
+                      className="flex items-center justify-between px-3 py-2 hover:bg-accent"
+                    >
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium">{h.symbol}</span>
+                          <Badge variant="outline" className="text-[10px]">
+                            {h.exchange}
+                          </Badge>
+                        </div>
+                        {h.name ? (
+                          <p className="text-xs text-muted-foreground">
+                            {h.name}
+                          </p>
+                        ) : null}
                       </div>
-                      {h.name ? (
-                        <p className="text-xs text-muted-foreground">
-                          {h.name}
-                        </p>
-                      ) : null}
-                    </div>
+                    </Link>
                   </li>
                 ))}
               </ul>
