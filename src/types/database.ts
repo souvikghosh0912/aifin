@@ -122,6 +122,26 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["quote_cache"]["Insert"]>;
         Relationships: [];
       };
+      historical_cache: {
+        Row: {
+          symbol: string;
+          exchange: Exchange;
+          range: "1M" | "3M" | "6M" | "1Y";
+          payload: Json;
+          fetched_at: string;
+        };
+        Insert: {
+          symbol: string;
+          exchange: Exchange;
+          range: "1M" | "3M" | "6M" | "1Y";
+          payload: Json;
+          fetched_at?: string;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["historical_cache"]["Insert"]
+        >;
+        Relationships: [];
+      };
       ai_conversations: {
         Row: {
           id: string;
