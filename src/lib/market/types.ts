@@ -34,6 +34,34 @@ export interface IndexQuote {
   changePct: number;
 }
 
+export type Range = "1M" | "3M" | "6M" | "1Y";
+
+export interface HistoricalCandle {
+  date: string; // ISO date "YYYY-MM-DD"
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
+
+export interface TopMover {
+  symbol: string;
+  name: string | null;
+  lastPrice: number;
+  changePct: number;
+}
+
+export interface MetaInfo {
+  symbol: string;
+  exchange: Exchange;
+  name: string | null;
+  industry: string | null;
+  marketCap: number | null;
+}
+
+export type Signal = "BUY" | "SELL" | "NEUTRAL";
+
 export class MarketDataError extends Error {
   constructor(
     message: string,
