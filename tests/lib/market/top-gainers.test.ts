@@ -35,9 +35,9 @@ describe("getTopGainers", () => {
     });
     const out = await getTopGainers();
     expect(out).toHaveLength(20);
-    expect(out[0].symbol).toBe("SYM29");
-    expect(out[0].changePct).toBe(29);
-    expect(out[0].name).toBe("Co 29");
+    expect(out[0]!.symbol).toBe("SYM29");
+    expect(out[0]!.changePct).toBe(29);
+    expect(out[0]!.name).toBe("Co 29");
   });
 
   it("returns [] on upstream throw", async () => {

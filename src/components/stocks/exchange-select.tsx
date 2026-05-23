@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import type { Route } from "next";
 
 import {
   Select,
@@ -23,7 +24,7 @@ export function ExchangeSelect({ symbol, current }: Props) {
       value={current}
       onValueChange={(next) => {
         router.replace(
-          `/stocks/${encodeURIComponent(symbol)}?exchange=${next}`,
+          `/stocks/${encodeURIComponent(symbol)}?exchange=${next}` as Route,
         );
       }}
     >
