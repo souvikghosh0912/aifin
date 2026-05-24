@@ -1,12 +1,19 @@
 import "server-only";
 
-import type { Exchange } from "@/types/database";
-
 import { nseBucket } from "./rate-limit";
+import {
+  INDICES,
+  STOCKS,
+  findMarketEntry,
+  getMarketIndices,
+  getMarketStocks,
+  type MarketEntry,
+  type MarketKind,
+} from "./markets-catalog";
 import {
   type HistoricalCandle,
   MarketDataError,
-  type Range,
+  type MarketsRange,
 } from "./types";
 import {
   fetchHistoricalRawYahoo,
@@ -17,65 +24,19 @@ import {
 
 /**
  * Markets-page catalog: hand-picked indices and large-cap stocks shown in
- * the two carousels. Order matters — the page paginates 4 at a time, so each
- * pair of 4 forms one "slide". The Yahoo symbol map is kept here so the rest
- * of the app never needs to know which symbol form the upstream API wants.
+ * the two carousels. Pure data lives in `./markets-catalog` so client
+ * components (e.g. the search modal) can read it without dragging in the
+ * server-only Yahoo fetchers.
  */
 
-export type MarketKind = "index" | "stock";
-
-export interface MarketEntry {
-  /** Stable URL/slug for routing through the markets API. */
-  id: string;
-  kind: MarketKind;
-  /** Display label on the card (e.g. "Nifty 50" or "Reliance Industries"). */
-  name: string;
-  /** Short ticker label (e.g. "NIFTY", "RELIANCE"). */
-  shortName: string;
-  /** Bare symbol for stocks (used with NSE suffix downstream). */
-  symbol: string;
-  /** Exchange for the stock variant; "NSE" for indices by convention. */
-  exchange: Exchange;
-  /** Fully-qualified Yahoo symbol for raw fetches (indices only). */
-  yahooSymbol: string;
-}
-
-const INDICES: MarketEntry[] = [
-  { id: "nifty-50", kind: "index", name: "Nifty 50", shortName: "NIFTY", symbol: "NIFTY", exchange: "NSE", yahooSymbol: "^NSEI" },
-  { id: "sensex", kind: "index", name: "Sensex", shortName: "SENSEX", symbol: "SENSEX", exchange: "BSE", yahooSymbol: "^BSESN" },
-  { id: "nifty-bank", kind: "index", name: "Nifty Bank", shortName: "BANKNIFTY", symbol: "BANKNIFTY", exchange: "NSE", yahooSymbol: "^NSEBANK" },
-  { id: "nifty-it", kind: "index", name: "Nifty IT", shortName: "NIFTYIT", symbol: "NIFTYIT", exchange: "NSE", yahooSymbol: "^CNXIT" },
-  { id: "nifty-100", kind: "index", name: "Nifty 100", shortName: "NIFTY100", symbol: "NIFTY100", exchange: "NSE", yahooSymbol: "^CNX100" },
-  { id: "nifty-midcap", kind: "index", name: "Nifty MidCap", shortName: "MIDCAP", symbol: "MIDCAP", exchange: "NSE", yahooSymbol: "^NSEMDCP50" },
-  { id: "nifty-auto", kind: "index", name: "Nifty Auto", shortName: "NIFTYAUTO", symbol: "NIFTYAUTO", exchange: "NSE", yahooSymbol: "^CNXAUTO" },
-  { id: "nifty-pharma", kind: "index", name: "Nifty Pharma", shortName: "NIFTYPHARMA", symbol: "NIFTYPHARMA", exchange: "NSE", yahooSymbol: "^CNXPHARMA" },
-];
-
-const STOCKS: MarketEntry[] = [
-  { id: "reliance", kind: "stock", name: "Reliance Industries", shortName: "RELIANCE", symbol: "RELIANCE", exchange: "NSE", yahooSymbol: "RELIANCE.NS" },
-  { id: "tcs", kind: "stock", name: "Tata Consultancy Services", shortName: "TCS", symbol: "TCS", exchange: "NSE", yahooSymbol: "TCS.NS" },
-  { id: "hdfcbank", kind: "stock", name: "HDFC Bank", shortName: "HDFCBANK", symbol: "HDFCBANK", exchange: "NSE", yahooSymbol: "HDFCBANK.NS" },
-  { id: "icicibank", kind: "stock", name: "ICICI Bank", shortName: "ICICIBANK", symbol: "ICICIBANK", exchange: "NSE", yahooSymbol: "ICICIBANK.NS" },
-  { id: "itc", kind: "stock", name: "ITC", shortName: "ITC", symbol: "ITC", exchange: "NSE", yahooSymbol: "ITC.NS" },
-  { id: "infy", kind: "stock", name: "Infosys", shortName: "INFY", symbol: "INFY", exchange: "NSE", yahooSymbol: "INFY.NS" },
-  { id: "wipro", kind: "stock", name: "Wipro", shortName: "WIPRO", symbol: "WIPRO", exchange: "NSE", yahooSymbol: "WIPRO.NS" },
-  { id: "hindunilvr", kind: "stock", name: "Hindustan Unilever", shortName: "HINDUNILVR", symbol: "HINDUNILVR", exchange: "NSE", yahooSymbol: "HINDUNILVR.NS" },
-];
-
-const ALL = [...INDICES, ...STOCKS];
-const BY_ID = new Map(ALL.map((e) => [e.id, e]));
-
-export function getMarketIndices(): MarketEntry[] {
-  return INDICES;
-}
-
-export function getMarketStocks(): MarketEntry[] {
-  return STOCKS;
-}
-
-export function findMarketEntry(id: string): MarketEntry | null {
-  return BY_ID.get(id) ?? null;
-}
+export {
+  INDICES,
+  STOCKS,
+  findMarketEntry,
+  getMarketIndices,
+  getMarketStocks,
+};
+export type { MarketEntry, MarketKind };
 
 export interface MarketQuoteSnapshot {
   id: string;
@@ -131,7 +92,7 @@ export async function fetchMarketQuotes(
 /** Fetch historical candles for any market entry. */
 export async function fetchMarketHistorical(
   entry: MarketEntry,
-  range: Range,
+  range: MarketsRange,
 ): Promise<HistoricalCandle[]> {
   await nseBucket.acquire();
   try {

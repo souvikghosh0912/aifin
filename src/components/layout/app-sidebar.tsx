@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-import { FindBar } from "@/components/layout/find-bar";
 import { NAV_ITEMS } from "@/lib/nav";
 import { cn } from "@/lib/utils";
 
@@ -18,7 +17,6 @@ export function AppSidebar() {
         </div>
         <span>finai</span>
       </div>
-      <FindBar />
       <nav className="flex-1 space-y-0.5 p-2">
         {NAV_ITEMS.map((item) => {
           const active =

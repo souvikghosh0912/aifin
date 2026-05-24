@@ -36,8 +36,20 @@ export interface IndexQuote {
 
 export type Range = "1M" | "3M" | "6M" | "1Y";
 
+/**
+ * Wider range set used by the markets page chart. Adds intraday (1D, served
+ * via 5-minute bars) plus multi-year buckets. Kept separate from `Range` so
+ * the historical_cache DB column and shared getHistorical pipeline keep
+ * their narrower contract.
+ */
+export type MarketsRange = Range | "1D" | "5Y" | "MAX";
+
 export interface HistoricalCandle {
-  date: string; // ISO date "YYYY-MM-DD"
+  /**
+   * ISO date "YYYY-MM-DD" for daily bars, or a full ISO timestamp for
+   * intraday bars (e.g. the 1D range on the markets page).
+   */
+  date: string;
   open: number;
   high: number;
   low: number;

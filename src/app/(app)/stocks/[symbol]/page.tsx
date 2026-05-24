@@ -106,7 +106,7 @@ async function ChartPanel({
   exchange: Exchange;
 }) {
   const candles = await getHistorical(symbol, exchange, "1Y");
-  return <TimeframeChart initial={candles} />;
+  return <TimeframeChart symbol={symbol} exchange={exchange} initial={candles} />;
 }
 
 async function FundamentalsSections({

@@ -1,6 +1,7 @@
 import { LogOut, User as UserIcon } from "lucide-react";
 
 import { signOut } from "@/app/(auth)/actions";
+import { HeaderSearchSlot } from "@/components/layout/header-search-slot";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import {
@@ -22,8 +23,11 @@ export function AppHeader({ email, displayName }: AppHeaderProps) {
 
   return (
     <header className="flex h-12 items-center justify-between border-b bg-background px-4 md:px-6">
-      <div className="text-sm font-bold md:hidden">finai</div>
-      <div className="ml-auto flex items-center gap-1">
+      <div className="flex items-center gap-3">
+        <div className="text-sm font-bold md:hidden">finai</div>
+        <HeaderSearchSlot />
+      </div>
+      <div className="flex items-center gap-1">
         <ThemeToggle />
         <DropdownMenu>
           <DropdownMenuTrigger asChild>

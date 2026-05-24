@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 
 import { SignalBadge } from "@/components/stocks/signal-badge";
+import { RailExtras } from "@/components/markets/rail-extras";
 import { getFundamentals } from "@/lib/market/fundamentals";
 import { getHistorical } from "@/lib/market/historical";
 import { computeSignal } from "@/lib/market/signal";
@@ -200,6 +201,8 @@ export async function KeyDetailsPanel({ symbol, exchange, quote, meta }: Props) 
           <Row label="Signal" value={<SignalBadge value={signal} />} />
         </dl>
       </div>
+
+      <RailExtras kind="stock" symbol={symbol} exchange={exchange} />
     </section>
   );
 }

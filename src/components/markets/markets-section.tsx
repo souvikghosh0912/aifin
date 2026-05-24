@@ -14,7 +14,7 @@ import {
 import { toast } from "sonner";
 
 import { Skeleton } from "@/components/ui/skeleton";
-import type { HistoricalCandle, Range } from "@/lib/market/types";
+import type { HistoricalCandle, MarketsRange } from "@/lib/market/types";
 import { cn, formatINR, formatNumber } from "@/lib/utils";
 
 export interface MarketsCardData {
@@ -37,26 +37,64 @@ interface Props {
   /** Initial candles for the first item so the chart paints immediately. */
   initialCandles: HistoricalCandle[];
   /** Initial range that initialCandles correspond to. */
-  initialRange: Range;
+  initialRange: MarketsRange;
+  /**
+   * Called after the local selection updates whenever the user clicks a card.
+   * Used by the markets page to drive the right-rail details panel.
+   */
+  onCardClick?: (entryId: string) => void;
 }
 
 const PAGE_SIZE = 4;
 
-// Display labels — 1M/3M/6M/1Y are wired to the API; the rest toast a
-// "coming soon" hint so the row mirrors the TradingView reference visually.
-const RANGE_TABS: Array<{ label: string; range: Range | null }> = [
-  { label: "1D", range: null },
+const RANGE_TABS: Array<{ label: string; range: MarketsRange }> = [
+  { label: "1D", range: "1D" },
   { label: "1M", range: "1M" },
   { label: "3M", range: "3M" },
+  { label: "6M", range: "6M" },
   { label: "1Y", range: "1Y" },
-  { label: "5Y", range: null },
-  { label: "All", range: null },
+  { label: "5Y", range: "5Y" },
+  { label: "All", range: "MAX" },
 ];
 
-const INTRADAY_FMT = new Intl.DateTimeFormat("en-IN", {
+const DATE_FMT = new Intl.DateTimeFormat("en-IN", {
   month: "short",
   day: "numeric",
 });
+
+const TIME_FMT = new Intl.DateTimeFormat("en-IN", {
+  hour: "numeric",
+  minute: "2-digit",
+});
+
+const MONTH_YEAR_FMT = new Intl.DateTimeFormat("en-IN", {
+  month: "short",
+  year: "numeric",
+});
+
+const YEAR_FMT = new Intl.DateTimeFormat("en-IN", { year: "numeric" });
+
+const FULL_DATE_FMT = new Intl.DateTimeFormat("en-IN", {
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+});
+
+function formatAxisTick(dateStr: string, range: MarketsRange): string {
+  const dt = new Date(dateStr);
+  if (!Number.isFinite(dt.getTime())) return dateStr;
+  if (range === "1D") return TIME_FMT.format(dt);
+  if (range === "MAX") return YEAR_FMT.format(dt);
+  if (range === "5Y") return MONTH_YEAR_FMT.format(dt);
+  return DATE_FMT.format(dt);
+}
+
+function formatTooltipLabel(dateStr: string, range: MarketsRange): string {
+  const dt = new Date(dateStr);
+  if (!Number.isFinite(dt.getTime())) return dateStr;
+  if (range === "1D") return `${DATE_FMT.format(dt)} · ${TIME_FMT.format(dt)}`;
+  return FULL_DATE_FMT.format(dt);
+}
 
 function tickerColor(symbol: string): string {
   let h = 0;
@@ -79,10 +117,11 @@ export function MarketsSection({
   items,
   initialCandles,
   initialRange,
+  onCardClick,
 }: Props) {
   const [page, setPage] = useState(0);
   const [selectedId, setSelectedId] = useState(items[0]?.id ?? "");
-  const [range, setRange] = useState<Range>(initialRange);
+  const [range, setRange] = useState<MarketsRange>(initialRange);
   const [candles, setCandles] = useState<HistoricalCandle[]>(initialCandles);
   const [loading, setLoading] = useState(false);
 
@@ -98,7 +137,7 @@ export function MarketsSection({
   );
 
   const loadHistorical = useCallback(
-    async (id: string, r: Range) => {
+    async (id: string, r: MarketsRange) => {
       setLoading(true);
       try {
         const res = await fetch(
@@ -178,7 +217,10 @@ export function MarketsSection({
                 key={it.id}
                 type="button"
                 aria-pressed={active}
-                onClick={() => setSelectedId(it.id)}
+                onClick={() => {
+                  setSelectedId(it.id);
+                  onCardClick?.(it.id);
+                }}
                 className={cn(
                   "group flex min-w-0 items-start gap-2.5 rounded-2xl border bg-card px-3 py-2.5 text-left transition-all hover:border-foreground/20 hover:bg-accent",
                   active
@@ -283,12 +325,7 @@ export function MarketsSection({
                     tickLine={false}
                     axisLine={false}
                     minTickGap={36}
-                    tickFormatter={(d: string) => {
-                      const dt = new Date(d);
-                      return Number.isFinite(dt.getTime())
-                        ? INTRADAY_FMT.format(dt)
-                        : d;
-                    }}
+                    tickFormatter={(d: string) => formatAxisTick(d, range)}
                   />
                   <YAxis
                     orientation="right"
@@ -314,6 +351,7 @@ export function MarketsSection({
                       fontSize: 12,
                       padding: "6px 8px",
                     }}
+                    labelFormatter={(label: string) => formatTooltipLabel(label, range)}
                     formatter={(v: number) => [
                       selected.kind === "stock"
                         ? formatINR(v)
@@ -322,7 +360,7 @@ export function MarketsSection({
                     ]}
                   />
                   <Area
-                    type="monotone"
+                    type="linear"
                     dataKey="close"
                     stroke={stroke}
                     strokeWidth={1.75}
@@ -344,19 +382,13 @@ export function MarketsSection({
         <div className="flex items-center justify-between border-t px-2 py-1.5">
           <div className="flex items-center gap-0.5">
             {RANGE_TABS.map((t) => {
-              const active = t.range != null && t.range === range;
+              const active = t.range === range;
               return (
                 <button
                   key={t.label}
                   type="button"
                   aria-pressed={active}
-                  onClick={() => {
-                    if (t.range == null) {
-                      toast.info(`${t.label} — coming soon`);
-                      return;
-                    }
-                    setRange(t.range);
-                  }}
+                  onClick={() => setRange(t.range)}
                   className={cn(
                     "min-w-[34px] rounded-md px-2 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground",
                     active && "bg-accent text-foreground",

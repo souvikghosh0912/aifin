@@ -7,7 +7,7 @@ import { MarketDataError } from "@/lib/market/types";
 export const runtime = "nodejs";
 
 const ParamsSchema = z.object({ id: z.string().min(1).max(48) });
-const RangeSchema = z.enum(["1M", "3M", "6M", "1Y"]);
+const RangeSchema = z.enum(["1D", "1M", "3M", "6M", "1Y", "5Y", "MAX"]);
 
 export async function GET(
   request: NextRequest,

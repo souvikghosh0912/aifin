@@ -1,10 +1,8 @@
-import { ChevronDown } from "lucide-react";
 import { Suspense } from "react";
 
-import {
-  MarketsSection,
-  type MarketsCardData,
-} from "@/components/markets/markets-section";
+import { type MarketsCardData } from "@/components/markets/markets-section";
+import { MarketsView } from "@/components/markets/markets-view";
+import { TopGainersList } from "@/components/stocks/top-gainers-list";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   fetchMarketHistorical,
@@ -13,61 +11,35 @@ import {
   getMarketStocks,
   type MarketEntry,
 } from "@/lib/market/markets";
-import type { HistoricalCandle, Range } from "@/lib/market/types";
+import type { HistoricalCandle, MarketsRange } from "@/lib/market/types";
 
 export const dynamic = "force-dynamic";
 
-const DEFAULT_RANGE: Range = "1M";
+const DEFAULT_RANGE: MarketsRange = "1M";
 
-export default function MarketsPage() {
-  return (
-    <div className="space-y-10 pb-12">
-      <div className="text-center">
-        <h1 className="inline-flex items-center gap-2 text-3xl font-bold tracking-tight md:text-4xl">
-          Markets, everywhere
-          <ChevronDown
-            className="h-6 w-6 text-muted-foreground"
-            strokeWidth={2.25}
-            aria-hidden
-          />
-        </h1>
-      </div>
+export default async function MarketsPage() {
+  const indices = getMarketIndices();
+  const stocks = getMarketStocks();
+  const allEntries: MarketEntry[] = [...indices, ...stocks];
 
-      <Suspense fallback={<SectionFallback />}>
-        <IndicesBlock />
-      </Suspense>
-      <Suspense fallback={<SectionFallback />}>
-        <StocksBlock />
-      </Suspense>
-    </div>
-  );
-}
+  const [allQuotes, indicesInitialCandles, stocksInitialCandles] =
+    await Promise.all([
+      fetchMarketQuotes(allEntries).catch(() => []),
+      indices[0]
+        ? fetchMarketHistorical(indices[0], DEFAULT_RANGE).catch(
+            () => [] as HistoricalCandle[],
+          )
+        : Promise.resolve([] as HistoricalCandle[]),
+      stocks[0]
+        ? fetchMarketHistorical(stocks[0], DEFAULT_RANGE).catch(
+            () => [] as HistoricalCandle[],
+          )
+        : Promise.resolve([] as HistoricalCandle[]),
+    ]);
 
-function SectionFallback() {
-  return (
-    <div className="space-y-4">
-      <Skeleton className="h-8 w-40" />
-      <Skeleton className="h-20 w-full" />
-      <Skeleton className="h-[360px] w-full" />
-    </div>
-  );
-}
-
-async function buildSectionData(entries: MarketEntry[]): Promise<{
-  cards: MarketsCardData[];
-  initialCandles: HistoricalCandle[];
-}> {
-  const [quotes, initialCandles] = await Promise.all([
-    fetchMarketQuotes(entries).catch(() => []),
-    entries[0]
-      ? fetchMarketHistorical(entries[0], DEFAULT_RANGE).catch(
-          () => [] as HistoricalCandle[],
-        )
-      : Promise.resolve([] as HistoricalCandle[]),
-  ]);
-  const byId = new Map(quotes.map((q) => [q.id, q]));
-  const cards: MarketsCardData[] = entries.map((e) => {
-    const q = byId.get(e.id);
+  const quoteById = new Map(allQuotes.map((q) => [q.id, q]));
+  const toCard = (e: MarketEntry): MarketsCardData => {
+    const q = quoteById.get(e.id);
     return {
       id: e.id,
       name: e.name,
@@ -77,33 +49,22 @@ async function buildSectionData(entries: MarketEntry[]): Promise<{
       change: q?.change ?? null,
       changePct: q?.changePct ?? null,
     };
-  });
-  return { cards, initialCandles };
-}
+  };
 
-async function IndicesBlock() {
-  const entries = getMarketIndices();
-  const { cards, initialCandles } = await buildSectionData(entries);
   return (
-    <MarketsSection
-      title="Indices"
-      items={cards}
-      initialCandles={initialCandles}
+    <MarketsView
+      indicesCards={indices.map(toCard)}
+      indicesInitialCandles={indicesInitialCandles}
+      stocksCards={stocks.map(toCard)}
+      stocksInitialCandles={stocksInitialCandles}
+      allEntries={allEntries}
+      allQuotes={allQuotes}
       initialRange={DEFAULT_RANGE}
-    />
-  );
-}
-
-async function StocksBlock() {
-  const entries = getMarketStocks();
-  const { cards, initialCandles } = await buildSectionData(entries);
-  return (
-    <MarketsSection
-      title="Indian stocks"
-      titleAccent={<span aria-label="India">🇮🇳</span>}
-      items={cards}
-      initialCandles={initialCandles}
-      initialRange={DEFAULT_RANGE}
+      topGainersSlot={
+        <Suspense key="top-gainers" fallback={<Skeleton className="w-full flex-1" />}>
+          <TopGainersList activeSymbol="" />
+        </Suspense>
+      }
     />
   );
 }

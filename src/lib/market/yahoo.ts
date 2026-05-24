@@ -6,8 +6,8 @@ import { normalizeSymbol } from "./symbols";
 import {
   MarketDataError,
   type HistoricalCandle,
+  type MarketsRange,
   type Quote,
-  type Range,
   type SymbolSearchHit,
 } from "./types";
 
@@ -68,17 +68,33 @@ function numOrNull(v: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-function yahooRangeParam(range: Range): string {
+function yahooRangeParam(range: MarketsRange): { interval: string; range: string } {
   switch (range) {
+    case "1D":
+      return { interval: "5m", range: "1d" };
     case "1M":
-      return "1mo";
+      return { interval: "1d", range: "1mo" };
     case "3M":
-      return "3mo";
+      return { interval: "1d", range: "3mo" };
     case "6M":
-      return "6mo";
+      return { interval: "1d", range: "6mo" };
     case "1Y":
-      return "1y";
+      return { interval: "1d", range: "1y" };
+    case "5Y":
+      return { interval: "1wk", range: "5y" };
+    case "MAX":
+      return { interval: "1mo", range: "max" };
   }
+}
+
+/** True when the Yahoo `interval` returns sub-daily bars. */
+function isIntradayInterval(interval: string): boolean {
+  return /m$|h$/.test(interval);
+}
+
+function candleDateFromTimestamp(ts: number, intraday: boolean): string {
+  const iso = new Date(ts * 1000).toISOString();
+  return intraday ? iso : iso.slice(0, 10);
 }
 
 /**
@@ -214,16 +230,18 @@ export async function fetchQuoteYahoo(
 export async function fetchHistoricalYahoo(
   symbol: string,
   exchange: Exchange,
-  range: Range,
+  range: MarketsRange,
 ): Promise<HistoricalCandle[]> {
   const bare = normalizeSymbol(symbol);
   if (!bare) {
     throw new MarketDataError(`Empty symbol for ${exchange}`);
   }
   const suffixed = `${bare}${yahooSuffix(exchange)}`;
+  const { interval, range: yRange } = yahooRangeParam(range);
+  const intraday = isIntradayInterval(interval);
   const url =
     `${CHART_URL}/${encodeURIComponent(suffixed)}` +
-    `?interval=1d&range=${yahooRangeParam(range)}`;
+    `?interval=${interval}&range=${yRange}`;
 
   let body: any;
   try {
@@ -261,7 +279,7 @@ export async function fetchHistoricalYahoo(
     // close is null until market closes — skip those, but accept rows where
     // some non-essential fields (open/high/low/volume) are missing.
     if (!Number.isFinite(ts) || close == null) continue;
-    const date = new Date(ts * 1000).toISOString().slice(0, 10);
+    const date = candleDateFromTimestamp(ts, intraday);
     candles.push({
       date,
       open: numOrNull(opens[i]) ?? close,
@@ -405,14 +423,16 @@ async function sparkRequest(
  */
 export async function fetchHistoricalRawYahoo(
   yahooSymbol: string,
-  range: Range,
+  range: MarketsRange,
 ): Promise<HistoricalCandle[]> {
   if (!yahooSymbol) {
     throw new MarketDataError("Empty Yahoo symbol");
   }
+  const { interval, range: yRange } = yahooRangeParam(range);
+  const intraday = isIntradayInterval(interval);
   const url =
     `${CHART_URL}/${encodeURIComponent(yahooSymbol)}` +
-    `?interval=1d&range=${yahooRangeParam(range)}`;
+    `?interval=${interval}&range=${yRange}`;
 
   let body: any;
   try {
@@ -444,7 +464,7 @@ export async function fetchHistoricalRawYahoo(
     const ts = Number(timestamps[i]);
     const close = numOrNull(closes[i]);
     if (!Number.isFinite(ts) || close == null) continue;
-    const date = new Date(ts * 1000).toISOString().slice(0, 10);
+    const date = candleDateFromTimestamp(ts, intraday);
     candles.push({
       date,
       open: numOrNull(opens[i]) ?? close,

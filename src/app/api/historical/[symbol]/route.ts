@@ -2,13 +2,25 @@ import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 
 import { getHistorical } from "@/lib/market/historical";
+import { nseBucket } from "@/lib/market/rate-limit";
 import { parseExchange } from "@/lib/market/symbols";
-import { MarketDataError } from "@/lib/market/types";
+import { MarketDataError, type MarketsRange } from "@/lib/market/types";
+import { fetchHistoricalYahoo } from "@/lib/market/yahoo";
 
 export const runtime = "nodejs";
 
 const ParamsSchema = z.object({ symbol: z.string().min(1).max(40) });
-const RangeSchema = z.enum(["1M", "3M", "6M", "1Y"]);
+const RangeSchema = z.enum([
+  "1D",
+  "1M",
+  "3M",
+  "6M",
+  "1Y",
+  "5Y",
+  "MAX",
+]);
+
+const NARROW_RANGES = new Set<MarketsRange>(["1M", "3M", "6M", "1Y"]);
 
 export async function GET(
   request: NextRequest,
@@ -27,11 +39,20 @@ export async function GET(
   }
 
   try {
-    const candles = await getHistorical(
-      parsed.data.symbol,
-      exchange,
-      rangeParsed.data,
-    );
+    // Narrow ranges (1M..1Y) go through the cached pipeline. Wider ranges
+    // (1D intraday, 5Y, MAX) bypass the historical_cache since its DB column
+    // is constrained to the narrow set.
+    const range = rangeParsed.data;
+    const candles = NARROW_RANGES.has(range)
+      ? await getHistorical(
+          parsed.data.symbol,
+          exchange,
+          range as "1M" | "3M" | "6M" | "1Y",
+        )
+      : await (async () => {
+          await nseBucket.acquire();
+          return fetchHistoricalYahoo(parsed.data.symbol, exchange, range);
+        })();
     return NextResponse.json(
       { candles },
       { headers: { "Cache-Control": "private, max-age=60" } },

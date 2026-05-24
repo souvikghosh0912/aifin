@@ -16,6 +16,12 @@ function buildCandles(days: number): HistoricalCandle[] {
   });
 }
 
+function renderChart(candles: HistoricalCandle[]) {
+  return render(
+    <TimeframeChart symbol="RELIANCE" exchange="NSE" initial={candles} />,
+  );
+}
+
 describe("<TimeframeChart />", () => {
   beforeEach(() => {
     vi.stubGlobal(
@@ -31,41 +37,63 @@ describe("<TimeframeChart />", () => {
     vi.unstubAllGlobals();
   });
 
-  it("renders the initial range as active", () => {
-    render(<TimeframeChart initial={buildCandles(260)} />);
-    expect(screen.getByRole("tab", { name: /3 months/i })).toHaveAttribute(
-      "data-active",
+  it("renders the initial 1Y range as active", () => {
+    renderChart(buildCandles(260));
+    expect(screen.getByRole("tab", { name: "1Y" })).toHaveAttribute(
+      "aria-selected",
       "true",
     );
   });
 
-  it("switches range on click without fetching", async () => {
+  it("switches between cached narrow ranges without fetching", async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
     const user = userEvent.setup();
-    render(<TimeframeChart initial={buildCandles(260)} />);
+    renderChart(buildCandles(260));
 
-    await user.click(screen.getByRole("tab", { name: /1 year/i }));
+    await user.click(screen.getByRole("tab", { name: "3M" }));
 
-    expect(screen.getByRole("tab", { name: /1 year/i })).toHaveAttribute(
-      "data-active",
+    expect(screen.getByRole("tab", { name: "3M" })).toHaveAttribute(
+      "aria-selected",
       "true",
     );
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("shows a percentage for each range", () => {
-    render(<TimeframeChart initial={buildCandles(260)} />);
-    // 4 range tabs, all with a numeric % since the series is monotonically up
+  it("fetches when switching to a range beyond the initial dataset", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ candles: buildCandles(60) }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    renderChart(buildCandles(260));
+
+    await user.click(screen.getByRole("tab", { name: "5Y" }));
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("range=5Y"),
+      expect.objectContaining({ cache: "no-store" }),
+    );
+  });
+
+  it("renders all six range tabs", () => {
+    renderChart(buildCandles(260));
     const tabs = screen.getAllByRole("tab");
-    expect(tabs).toHaveLength(4);
-    for (const tab of tabs) {
-      expect(tab.textContent).toMatch(/[+-]?\d+\.\d{2}%/);
-    }
+    expect(tabs).toHaveLength(6);
+    expect(tabs.map((t) => t.textContent)).toEqual([
+      "1D",
+      "1M",
+      "3M",
+      "1Y",
+      "5Y",
+      "All",
+    ]);
   });
 
   it("renders 'Not enough data' when initial has < 2 candles", () => {
-    render(<TimeframeChart initial={[]} />);
+    renderChart([]);
     expect(screen.getByText(/Not enough data/i)).toBeInTheDocument();
   });
 });
