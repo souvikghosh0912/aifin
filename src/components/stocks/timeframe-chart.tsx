@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   Area,
   AreaChart,
@@ -10,20 +10,42 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import {
+  Crosshair,
+  Eraser,
+  Magnet,
+  MousePointer2,
+  Ruler,
+  Settings,
+  TrendingUp,
+  ZoomIn,
+} from "lucide-react";
+import { toast } from "sonner";
 
 import { FullChartStub } from "@/components/stocks/full-chart-stub";
-import { Skeleton } from "@/components/ui/skeleton";
-import type { Exchange } from "@/types/database";
 import type { HistoricalCandle, Range } from "@/lib/market/types";
 import { cn, formatINR } from "@/lib/utils";
 
 interface Props {
+  /** Historical candles covering at least the longest range (1Y). */
   initial: HistoricalCandle[];
-  symbol: string;
-  exchange: Exchange;
 }
 
 const RANGES: Range[] = ["1M", "3M", "6M", "1Y"];
+
+const RANGE_LABELS: Record<Range, string> = {
+  "1M": "1 month",
+  "3M": "3 months",
+  "6M": "6 months",
+  "1Y": "1 year",
+};
+
+const RANGE_DAYS: Record<Range, number> = {
+  "1M": 30,
+  "3M": 90,
+  "6M": 180,
+  "1Y": 365,
+};
 
 const SHORT_DATE = new Intl.DateTimeFormat("en-IN", {
   month: "short",
@@ -36,12 +58,40 @@ function formatTick(dateStr: string): string {
   return SHORT_DATE.format(d);
 }
 
-export function TimeframeChart({ initial, symbol, exchange }: Props) {
+function sliceRange(
+  candles: HistoricalCandle[],
+  range: Range,
+): HistoricalCandle[] {
+  if (candles.length === 0) return candles;
+  const cutoff = Date.now() - RANGE_DAYS[range] * 24 * 60 * 60 * 1000;
+  const sliced = candles.filter((c) => {
+    const t = new Date(c.date).getTime();
+    return Number.isFinite(t) && t >= cutoff;
+  });
+  // Fallback: if the dataset is older than the cutoff (e.g. weekend/holiday
+  // gap pushes everything past it), keep at least the last 2 candles so the
+  // chart still draws.
+  return sliced.length >= 2 ? sliced : candles.slice(-2);
+}
+
+function rangePct(candles: HistoricalCandle[]): number | null {
+  if (candles.length < 2) return null;
+  const first = candles[0]!.close;
+  const last = candles[candles.length - 1]!.close;
+  if (first === 0) return null;
+  return ((last - first) / first) * 100;
+}
+
+export function TimeframeChart({ initial }: Props) {
   const [range, setRange] = useState<Range>("3M");
-  const [candles, setCandles] = useState<HistoricalCandle[]>(initial);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const abortRef = useRef<AbortController | null>(null);
+
+  const slices = useMemo(() => {
+    const m = {} as Record<Range, HistoricalCandle[]>;
+    for (const r of RANGES) m[r] = sliceRange(initial, r);
+    return m;
+  }, [initial]);
+
+  const candles = slices[range];
 
   const trend = useMemo(() => {
     if (candles.length < 2) return "flat" as const;
@@ -52,8 +102,6 @@ export function TimeframeChart({ initial, symbol, exchange }: Props) {
     return "flat" as const;
   }, [candles]);
 
-  // Map trend → chart token. Up = success green, down = destructive red,
-  // flat = muted foreground.
   const stroke =
     trend === "up"
       ? "hsl(var(--success))"
@@ -61,74 +109,43 @@ export function TimeframeChart({ initial, symbol, exchange }: Props) {
         ? "hsl(var(--destructive))"
         : "hsl(var(--muted-foreground))";
 
-  async function selectRange(next: Range) {
-    if (next === range && !error) return;
-    abortRef.current?.abort();
-    const ac = new AbortController();
-    abortRef.current = ac;
-    setRange(next);
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await fetch(
-        `/api/historical/${encodeURIComponent(symbol)}?exchange=${exchange}&range=${next}`,
-        { signal: ac.signal },
-      );
-      if (!res.ok) {
-        setError("Chart unavailable. Try again later.");
-        return;
-      }
-      const body = (await res.json()) as { candles: HistoricalCandle[] };
-      setCandles(body.candles ?? []);
-    } catch (err) {
-      if ((err as Error).name === "AbortError") return;
-      setError("Chart unavailable. Try again later.");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    return () => abortRef.current?.abort();
-  }, []);
+  const hasData = initial.length >= 2;
 
   return (
     <div className="overflow-hidden rounded-lg border bg-card">
-      <div className="flex items-center justify-between gap-2 border-b px-3 py-2">
-        <div className="flex items-center gap-0.5 text-xs">
-          {RANGES.map((r) => (
-            <button
-              key={r}
-              type="button"
-              data-active={r === range}
-              onClick={() => selectRange(r)}
-              className={cn(
-                "rounded px-2.5 py-1 font-semibold text-muted-foreground transition-colors hover:bg-accent hover:text-foreground",
-                r === range && "bg-accent text-foreground",
-              )}
-            >
-              {r}
-            </button>
-          ))}
+      <div className="flex items-center justify-between gap-2 border-b px-2 py-1">
+        <div className="flex items-center gap-0.5">
+          <ToolIcon label="Cursor">
+            <MousePointer2 className="h-3.5 w-3.5" />
+          </ToolIcon>
+          <ToolIcon label="Crosshair">
+            <Crosshair className="h-3.5 w-3.5" />
+          </ToolIcon>
+          <ToolIcon label="Trend line">
+            <TrendingUp className="h-3.5 w-3.5" />
+          </ToolIcon>
+          <ToolIcon label="Measure">
+            <Ruler className="h-3.5 w-3.5" />
+          </ToolIcon>
+          <ToolIcon label="Eraser">
+            <Eraser className="h-3.5 w-3.5" />
+          </ToolIcon>
+          <span aria-hidden className="mx-1 h-4 w-px bg-border" />
+          <ToolIcon label="Magnet">
+            <Magnet className="h-3.5 w-3.5" />
+          </ToolIcon>
+          <ToolIcon label="Zoom">
+            <ZoomIn className="h-3.5 w-3.5" />
+          </ToolIcon>
+          <ToolIcon label="Settings">
+            <Settings className="h-3.5 w-3.5" />
+          </ToolIcon>
         </div>
         <FullChartStub />
       </div>
 
       <div className="relative h-[440px] p-3 md:h-[520px]">
-        {loading ? (
-          <Skeleton className="h-full w-full" />
-        ) : error ? (
-          <div className="flex h-full items-center justify-center gap-3 text-sm text-muted-foreground">
-            <span>{error}</span>
-            <button
-              type="button"
-              onClick={() => selectRange(range)}
-              className="rounded border px-2 py-0.5 text-xs hover:bg-accent"
-            >
-              Retry
-            </button>
-          </div>
-        ) : candles.length < 2 ? (
+        {!hasData ? (
           <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
             Not enough data to chart.
           </div>
@@ -199,6 +216,70 @@ export function TimeframeChart({ initial, symbol, exchange }: Props) {
           </ResponsiveContainer>
         )}
       </div>
+
+      <div
+        role="tablist"
+        aria-label="Chart timeframe"
+        className="grid grid-cols-4 gap-px border-t bg-border"
+      >
+        {RANGES.map((r) => {
+          const pct = rangePct(slices[r]);
+          const isActive = r === range;
+          const up = (pct ?? 0) >= 0;
+          return (
+            <button
+              key={r}
+              type="button"
+              role="tab"
+              aria-selected={isActive}
+              data-active={isActive}
+              onClick={() => setRange(r)}
+              className={cn(
+                "flex flex-col items-start gap-0.5 bg-card px-3 py-2.5 text-left transition-colors hover:bg-accent",
+                isActive && "bg-accent",
+              )}
+            >
+              <span className="text-xs font-medium text-foreground">
+                {RANGE_LABELS[r]}
+              </span>
+              <span
+                className={cn(
+                  "num text-xs font-semibold tabular-nums",
+                  pct == null
+                    ? "text-muted-foreground"
+                    : up
+                      ? "text-success"
+                      : "text-destructive",
+                )}
+              >
+                {pct == null
+                  ? "—"
+                  : `${up ? "+" : ""}${pct.toFixed(2)}%`}
+              </span>
+            </button>
+          );
+        })}
+      </div>
     </div>
+  );
+}
+
+function ToolIcon({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      onClick={() => toast.info(`${label} — coming soon`)}
+      className="grid h-7 w-7 place-items-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+    >
+      {children}
+    </button>
   );
 }

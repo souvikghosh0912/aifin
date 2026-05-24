@@ -14,6 +14,22 @@ vi.mock("@/lib/market/historical", () => ({
     })),
 }));
 
+vi.mock("@/lib/market/fundamentals", () => ({
+  getFundamentals: async () => ({
+    symbol: "RELIANCE",
+    exchange: "NSE",
+    marketCap: null,
+    dividendYieldPct: null,
+    trailingPE: null,
+    basicEpsTTM: null,
+    netIncomeFY: null,
+    revenueFY: null,
+    floatShares: null,
+    beta: null,
+    earnings: null,
+  }),
+}));
+
 import { KeyDetailsPanel } from "@/components/stocks/key-details-panel";
 import type { MetaInfo, Quote } from "@/lib/market/types";
 

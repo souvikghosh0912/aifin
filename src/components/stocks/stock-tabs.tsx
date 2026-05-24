@@ -1,36 +1,54 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
+
 import { cn } from "@/lib/utils";
 
 /**
- * TradingView-style tab strip under the hero header. Each tab is an in-page
- * anchor that scrolls to a labelled section (`#overview`, `#key-stats`,
- * `#technicals`). Active state is driven by IntersectionObserver so the
- * underline tracks the user's scroll position.
+ * TradingView-style horizontal tab strip. Functional tabs scroll to in-page
+ * anchors; placeholder tabs (Financials, News, etc.) ship as visual stubs
+ * that toast a "coming soon" hint on click. Active state is driven by an
+ * IntersectionObserver on the functional anchors so the underline tracks
+ * the user's scroll position.
  */
-const TABS = [
-  { id: "overview", label: "Overview" },
-  { id: "key-stats", label: "Key stats" },
-  { id: "technicals", label: "Technicals" },
-] as const;
+interface TabDef {
+  id: string;
+  label: string;
+  /** When false, the tab is a visual placeholder and pops a toast on click. */
+  functional: boolean;
+}
 
-type TabId = (typeof TABS)[number]["id"];
+const TABS: TabDef[] = [
+  { id: "overview", label: "Overview", functional: true },
+  { id: "financials", label: "Financials", functional: false },
+  { id: "news", label: "News", functional: false },
+  { id: "ideas", label: "Ideas", functional: false },
+  { id: "community", label: "Community", functional: false },
+  { id: "technicals", label: "Technicals", functional: true },
+  { id: "forecasts", label: "Forecasts", functional: false },
+  { id: "seasonals", label: "Seasonals", functional: false },
+  { id: "options", label: "Options", functional: false },
+  { id: "bonds", label: "Bonds", functional: false },
+  { id: "etfs", label: "ETFs", functional: false },
+];
+
+const FUNCTIONAL_IDS = TABS.filter((t) => t.functional).map((t) => t.id);
 
 export function StockTabs() {
-  const [active, setActive] = useState<TabId>("overview");
+  const [active, setActive] = useState<string>("overview");
 
   useEffect(() => {
-    const sections = TABS.map((t) => document.getElementById(t.id)).filter(
-      (el): el is HTMLElement => el !== null,
-    );
+    const sections = FUNCTIONAL_IDS.map((id) =>
+      document.getElementById(id),
+    ).filter((el): el is HTMLElement => el !== null);
     if (sections.length === 0) return;
     const obs = new IntersectionObserver(
       (entries) => {
         const visible = entries
           .filter((e) => e.isIntersecting)
           .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
-        if (visible) setActive(visible.target.id as TabId);
+        if (visible) setActive(visible.target.id);
       },
       { rootMargin: "-30% 0px -55% 0px", threshold: [0, 0.25, 0.5, 1] },
     );
@@ -40,30 +58,47 @@ export function StockTabs() {
 
   return (
     <nav
-      className="-mx-0.5 flex items-center gap-1 overflow-x-auto border-b text-sm"
+      className="-mx-0.5 flex items-center gap-0 overflow-x-auto border-b text-[13px]"
       aria-label="Stock page sections"
     >
       {TABS.map((t) => {
         const isActive = active === t.id;
-        return (
-          <a
-            key={t.id}
-            href={`#${t.id}`}
-            aria-current={isActive ? "page" : undefined}
+        const className = cn(
+          "relative shrink-0 px-3 py-2.5 font-normal text-muted-foreground transition-colors hover:text-foreground",
+          isActive && "font-semibold text-foreground",
+        );
+        const underline = (
+          <span
+            aria-hidden
             className={cn(
-              "relative shrink-0 px-3 py-2.5 font-medium text-muted-foreground transition-colors hover:text-foreground",
-              isActive && "text-foreground",
+              "absolute inset-x-2 -bottom-px h-[2px] rounded-full bg-foreground transition-opacity",
+              isActive ? "opacity-100" : "opacity-0",
             )}
+          />
+        );
+        if (t.functional) {
+          return (
+            <a
+              key={t.id}
+              href={`#${t.id}`}
+              aria-current={isActive ? "page" : undefined}
+              className={className}
+            >
+              {t.label}
+              {underline}
+            </a>
+          );
+        }
+        return (
+          <button
+            key={t.id}
+            type="button"
+            onClick={() => toast.info(`${t.label} — coming soon`)}
+            className={className}
           >
             {t.label}
-            <span
-              aria-hidden
-              className={cn(
-                "absolute inset-x-2 -bottom-px h-[2px] rounded-full bg-foreground transition-opacity",
-                isActive ? "opacity-100" : "opacity-0",
-              )}
-            />
-          </a>
+            {underline}
+          </button>
         );
       })}
     </nav>

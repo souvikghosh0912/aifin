@@ -324,6 +324,33 @@ async function fetchSparkBatch(
 ): Promise<SparkQuote[]> {
   const suffix = yahooSuffix(exchange);
   const suffixed = bareSymbols.map((s) => `${s}${suffix}`);
+  return sparkRequest(bareSymbols, suffixed);
+}
+
+/**
+ * Spark variant for symbols Yahoo already keys natively (Indian indices like
+ * "^NSEI", "^BSESN" etc.) — we pass them straight through without any
+ * .NS/.BO suffix that the spark batch path would otherwise add.
+ */
+export async function fetchSparkYahooRaw(
+  yahooSymbols: string[],
+): Promise<SparkQuote[]> {
+  const cleaned = yahooSymbols.filter((s) => typeof s === "string" && s.length > 0);
+  if (cleaned.length === 0) return [];
+  const batches: string[][] = [];
+  for (let i = 0; i < cleaned.length; i += SPARK_BATCH_SIZE) {
+    batches.push(cleaned.slice(i, i + SPARK_BATCH_SIZE));
+  }
+  const results = await Promise.all(
+    batches.map((batch) => sparkRequest(batch, batch)),
+  );
+  return results.flat();
+}
+
+async function sparkRequest(
+  bareSymbols: string[],
+  suffixed: string[],
+): Promise<SparkQuote[]> {
   const url =
     `${SPARK_URL}?symbols=${encodeURIComponent(suffixed.join(","))}` +
     "&interval=1d&range=1d";
@@ -339,16 +366,16 @@ async function fetchSparkBatch(
   if (!body || typeof body !== "object") return [];
 
   const out: SparkQuote[] = [];
-  for (const bare of bareSymbols) {
-    const key = `${bare}${suffix}`;
+  for (let i = 0; i < bareSymbols.length; i++) {
+    const bare = bareSymbols[i]!;
+    const key = suffixed[i]!;
     const entry = body[key];
     if (!entry || typeof entry !== "object") continue;
     const prev = Number(entry.chartPreviousClose);
     const closes: unknown[] = Array.isArray(entry.close) ? entry.close : [];
-    // Walk the close series from the end to find the most recent non-null tick.
     let lastPrice: number | null = null;
-    for (let i = closes.length - 1; i >= 0; i--) {
-      const v = numOrNull(closes[i]);
+    for (let j = closes.length - 1; j >= 0; j--) {
+      const v = numOrNull(closes[j]);
       if (v != null) {
         lastPrice = v;
         break;
@@ -357,9 +384,12 @@ async function fetchSparkBatch(
     if (lastPrice == null || !Number.isFinite(prev)) continue;
     const change = lastPrice - prev;
     const changePct = prev !== 0 ? (change / prev) * 100 : 0;
+    // Raw-symbol callers see exchange "NSE" by convention (indices live there
+    // logically); stock callers pass through their own exchange via the typed
+    // wrapper. The field is informational for downstream display only.
     out.push({
       symbol: bare,
-      exchange,
+      exchange: "NSE",
       lastPrice,
       previousClose: prev,
       change,
@@ -367,4 +397,63 @@ async function fetchSparkBatch(
     });
   }
   return out;
+}
+
+/**
+ * Fetch daily OHLC candles for a fully-qualified Yahoo symbol (e.g. "^NSEI").
+ * Same wire shape as fetchHistoricalYahoo but skips suffix mangling.
+ */
+export async function fetchHistoricalRawYahoo(
+  yahooSymbol: string,
+  range: Range,
+): Promise<HistoricalCandle[]> {
+  if (!yahooSymbol) {
+    throw new MarketDataError("Empty Yahoo symbol");
+  }
+  const url =
+    `${CHART_URL}/${encodeURIComponent(yahooSymbol)}` +
+    `?interval=1d&range=${yahooRangeParam(range)}`;
+
+  let body: any;
+  try {
+    body = await yfetch(url);
+  } catch (err) {
+    if (err instanceof MarketDataError) throw err;
+    throw new MarketDataError(`Historical fetch failed for ${yahooSymbol}`, err);
+  }
+
+  if (body?.chart?.error) {
+    const description =
+      body.chart.error.description ?? body.chart.error.code ?? "unknown";
+    throw new MarketDataError(
+      `Yahoo returned no historical data for ${yahooSymbol}: ${description}`,
+    );
+  }
+
+  const result = body?.chart?.result?.[0];
+  const timestamps: unknown[] = result?.timestamp ?? [];
+  const quote = result?.indicators?.quote?.[0] ?? {};
+  const opens: unknown[] = quote.open ?? [];
+  const highs: unknown[] = quote.high ?? [];
+  const lows: unknown[] = quote.low ?? [];
+  const closes: unknown[] = quote.close ?? [];
+  const volumes: unknown[] = quote.volume ?? [];
+
+  const candles: HistoricalCandle[] = [];
+  for (let i = 0; i < timestamps.length; i++) {
+    const ts = Number(timestamps[i]);
+    const close = numOrNull(closes[i]);
+    if (!Number.isFinite(ts) || close == null) continue;
+    const date = new Date(ts * 1000).toISOString().slice(0, 10);
+    candles.push({
+      date,
+      open: numOrNull(opens[i]) ?? close,
+      high: numOrNull(highs[i]) ?? close,
+      low: numOrNull(lows[i]) ?? close,
+      close,
+      volume: numOrNull(volumes[i]) ?? 0,
+    });
+  }
+  candles.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+  return candles;
 }

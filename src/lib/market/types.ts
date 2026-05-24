@@ -61,6 +61,39 @@ export interface MetaInfo {
   marketCap: number | null;
 }
 
+export interface LatestEarnings {
+  /** ISO date of the most recent earnings report ("YYYY-MM-DD"), if known. */
+  reportDate: string | null;
+  /** Calendar label such as "Q4 2025". */
+  period: string | null;
+  /** Reported EPS for the period (per-share, native currency). */
+  eps: number | null;
+  /** Reported revenue for the period (native currency). */
+  revenue: number | null;
+}
+
+export interface Fundamentals {
+  symbol: string;
+  exchange: Exchange;
+  marketCap: number | null;
+  /** Indicated dividend yield as a percent (e.g. 2.5 means 2.5%). */
+  dividendYieldPct: number | null;
+  /** Trailing twelve-month P/E ratio. */
+  trailingPE: number | null;
+  /** Trailing twelve-month basic EPS. */
+  basicEpsTTM: number | null;
+  /** Most recent full-fiscal-year net income. */
+  netIncomeFY: number | null;
+  /** Most recent full-fiscal-year revenue. */
+  revenueFY: number | null;
+  /** Floating share count. */
+  floatShares: number | null;
+  /** 1-year beta vs the broad market. */
+  beta: number | null;
+  /** Latest reported quarter snapshot. */
+  earnings: LatestEarnings | null;
+}
+
 export type Signal = "BUY" | "SELL" | "NEUTRAL";
 
 export class MarketDataError extends Error {

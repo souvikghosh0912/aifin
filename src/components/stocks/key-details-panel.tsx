@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 
 import { SignalBadge } from "@/components/stocks/signal-badge";
+import { getFundamentals } from "@/lib/market/fundamentals";
 import { getHistorical } from "@/lib/market/historical";
 import { computeSignal } from "@/lib/market/signal";
 import type { Exchange } from "@/types/database";
@@ -67,7 +68,10 @@ function HeaderIcon({
 }
 
 export async function KeyDetailsPanel({ symbol, exchange, quote, meta }: Props) {
-  const candles = await getHistorical(symbol, exchange, "1M");
+  const [candles, fundamentals] = await Promise.all([
+    getHistorical(symbol, exchange, "1M"),
+    getFundamentals(symbol, exchange),
+  ]);
   const last30 = candles.slice(-30);
   const avgVol30d =
     last30.length === 0
@@ -181,15 +185,39 @@ export async function KeyDetailsPanel({ symbol, exchange, quote, meta }: Props) 
           <Row label="Average Volume (30D)" value={formatCompact(avgVol30d)} />
           <Row
             label="Market capitalization"
-            value={formatCompact(meta.marketCap)}
+            value={formatCompact(
+              fundamentals.marketCap ?? meta.marketCap,
+            )}
           />
           <Row label="Day high" value={fmtPrice(quote.dayHigh)} />
           <Row label="Day low" value={fmtPrice(quote.dayLow)} />
+          <Row
+            label="Last earnings report"
+            value={formatRelativeReportDate(
+              fundamentals.earnings?.reportDate ?? null,
+            )}
+          />
           <Row label="Signal" value={<SignalBadge value={signal} />} />
         </dl>
       </div>
     </section>
   );
+}
+
+const REPORT_DATE_FMT = new Intl.DateTimeFormat("en-IN", {
+  month: "short",
+  day: "numeric",
+});
+
+function formatRelativeReportDate(iso: string | null): string {
+  if (!iso) return "—";
+  const d = new Date(`${iso}T00:00:00Z`);
+  if (!Number.isFinite(d.getTime())) return "—";
+  const days = Math.floor((Date.now() - d.getTime()) / (24 * 60 * 60_000));
+  if (days < 0) return `in ${-days} days`;
+  if (days === 0) return "today";
+  if (days < 31) return `${days} day${days === 1 ? "" : "s"} ago`;
+  return REPORT_DATE_FMT.format(d);
 }
 
 function Row({ label, value }: { label: string; value: React.ReactNode }) {

@@ -1,19 +1,19 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { TimeframeChart } from "@/components/stocks/timeframe-chart";
 import type { HistoricalCandle } from "@/lib/market/types";
 
-function initial(): HistoricalCandle[] {
-  return Array.from({ length: 5 }, (_, i) => ({
-    date: `2026-04-0${i + 1}`,
-    open: 100 + i,
-    high: 101 + i,
-    low: 99 + i,
-    close: 100 + i,
-    volume: 1000,
-  }));
+function buildCandles(days: number): HistoricalCandle[] {
+  const now = Date.now();
+  const dayMs = 24 * 60 * 60 * 1000;
+  return Array.from({ length: days }, (_, i) => {
+    const t = now - (days - 1 - i) * dayMs;
+    const date = new Date(t).toISOString().slice(0, 10);
+    const close = 100 + i;
+    return { date, open: close, high: close + 1, low: close - 1, close, volume: 1000 };
+  });
 }
 
 describe("<TimeframeChart />", () => {
@@ -26,68 +26,46 @@ describe("<TimeframeChart />", () => {
         disconnect() {}
       },
     );
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () =>
-        new Response(JSON.stringify({ candles: initial() }), { status: 200 }),
-      ),
-    );
   });
   afterEach(() => {
     vi.unstubAllGlobals();
   });
 
   it("renders the initial range as active", () => {
-    render(
-      <TimeframeChart initial={initial()} symbol="RELIANCE" exchange="NSE" />,
-    );
-    expect(screen.getByRole("button", { name: "3M" })).toHaveAttribute(
+    render(<TimeframeChart initial={buildCandles(260)} />);
+    expect(screen.getByRole("tab", { name: /3 months/i })).toHaveAttribute(
       "data-active",
       "true",
     );
   });
 
-  it("fetches when switching to 1Y", async () => {
-    const fetchMock = vi.fn(async () =>
-      new Response(JSON.stringify({ candles: initial() }), { status: 200 }),
-    );
+  it("switches range on click without fetching", async () => {
+    const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
     const user = userEvent.setup();
-    render(
-      <TimeframeChart initial={initial()} symbol="RELIANCE" exchange="NSE" />,
-    );
+    render(<TimeframeChart initial={buildCandles(260)} />);
 
-    await user.click(screen.getByRole("button", { name: "1Y" }));
+    await user.click(screen.getByRole("tab", { name: /1 year/i }));
 
-    await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledWith(
-        "/api/historical/RELIANCE?exchange=NSE&range=1Y",
-        expect.anything(),
-      );
-    });
-    expect(screen.getByRole("button", { name: "1Y" })).toHaveAttribute(
+    expect(screen.getByRole("tab", { name: /1 year/i })).toHaveAttribute(
       "data-active",
       "true",
     );
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("shows the error state when the fetch returns 502", async () => {
-    const fetchMock = vi.fn(async () =>
-      new Response(JSON.stringify({ error: "upstream_down" }), { status: 502 }),
-    );
-    vi.stubGlobal("fetch", fetchMock);
-    const user = userEvent.setup();
-    render(
-      <TimeframeChart initial={initial()} symbol="RELIANCE" exchange="NSE" />,
-    );
-
-    await user.click(screen.getByRole("button", { name: "6M" }));
-
-    expect(await screen.findByText(/Chart unavailable/i)).toBeInTheDocument();
+  it("shows a percentage for each range", () => {
+    render(<TimeframeChart initial={buildCandles(260)} />);
+    // 4 range tabs, all with a numeric % since the series is monotonically up
+    const tabs = screen.getAllByRole("tab");
+    expect(tabs).toHaveLength(4);
+    for (const tab of tabs) {
+      expect(tab.textContent).toMatch(/[+-]?\d+\.\d{2}%/);
+    }
   });
 
   it("renders 'Not enough data' when initial has < 2 candles", () => {
-    render(<TimeframeChart initial={[]} symbol="RELIANCE" exchange="NSE" />);
+    render(<TimeframeChart initial={[]} />);
     expect(screen.getByText(/Not enough data/i)).toBeInTheDocument();
   });
 });
