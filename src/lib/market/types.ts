@@ -108,6 +108,31 @@ export interface Fundamentals {
 
 export type Signal = "BUY" | "SELL" | "NEUTRAL";
 
+export interface CompanyProfile {
+  symbol: string;
+  exchange: Exchange;
+  /** Broad classification (e.g. "Financial Services"). */
+  sector: string | null;
+  /** Narrower classification (e.g. "Major Banks"). */
+  industry: string | null;
+  /** Best-effort current chief executive — first officer with "CEO" in their title. */
+  ceo: string | null;
+  /** Bare hostname (e.g. "hdfcbank.com") suitable for display + href via `https://`. */
+  website: string | null;
+  /** Headquarters city / locality. */
+  headquarters: string | null;
+  /** Year the company was founded. */
+  founded: number | null;
+  /** ISO date "YYYY-MM-DD" of NSE listing (proxy for IPO date). */
+  ipoDate: string | null;
+  /** ISIN (International Securities Identification Number) — exchange registry code. */
+  isin: string | null;
+  /** CFI (Classification of Financial Instrument) code. Rarely available in upstream data. */
+  cfiCode: string | null;
+  /** Long-form business description from the issuer profile. */
+  description: string | null;
+}
+
 export class MarketDataError extends Error {
   constructor(
     message: string,

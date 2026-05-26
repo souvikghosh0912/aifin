@@ -2,7 +2,9 @@ import { ChevronRight } from "lucide-react";
 import { Suspense } from "react";
 
 import { KeyDetailsPanel } from "@/components/stocks/key-details-panel";
-import { SidebarSearch } from "@/components/stocks/sidebar-search";
+import { AboutSection } from "@/components/stocks/about-section";
+import { NewsSection } from "@/components/stocks/news-section";
+import { RailResizable } from "@/components/stocks/rail-resizable";
 import { SidebarToggle } from "@/components/stocks/sidebar-toggle";
 import { SignalBadge } from "@/components/stocks/signal-badge";
 import { StockHeader } from "@/components/stocks/stock-header";
@@ -14,6 +16,7 @@ import { getFundamentals } from "@/lib/market/fundamentals";
 import { getHistorical } from "@/lib/market/historical";
 import { getMetaInfo } from "@/lib/market/meta";
 import { getQuote } from "@/lib/market/nse";
+import { getCompanyProfile } from "@/lib/market/profile";
 import { computeSignal } from "@/lib/market/signal";
 import { parseExchange } from "@/lib/market/symbols";
 import type { Fundamentals, LatestEarnings, MetaInfo } from "@/lib/market/types";
@@ -35,45 +38,66 @@ export default async function StockPage({ params, searchParams }: PageProps) {
     getMetaInfo(symbol, exchange),
   ]);
 
-  const Rail = (
-    <>
-      <SidebarSearch />
-      <Suspense fallback={<Skeleton className="w-full flex-1" />}>
-        <TopGainersList activeSymbol={quote.symbol} />
-      </Suspense>
-      <Suspense fallback={<Skeleton className="w-full flex-1" />}>
-        <KeyDetailsPanel
-          symbol={symbol}
-          exchange={exchange}
-          quote={quote}
-          meta={meta}
-        />
-      </Suspense>
-    </>
+  const topSection = (
+    <Suspense fallback={<Skeleton className="w-full flex-1" />}>
+      <TopGainersList activeSymbol={quote.symbol} />
+    </Suspense>
+  );
+  const bottomSection = (
+    <Suspense fallback={<Skeleton className="w-full flex-1" />}>
+      <KeyDetailsPanel
+        symbol={symbol}
+        exchange={exchange}
+        quote={quote}
+        meta={meta}
+      />
+    </Suspense>
+  );
+  const mobileRail = (
+    <div className="md:hidden">
+      <SidebarToggle>
+        {topSection}
+        {bottomSection}
+      </SidebarToggle>
+    </div>
   );
 
   return (
-    <div className="space-y-4 md:pr-[320px]">
-      <div className="md:hidden">
-        <SidebarToggle>{Rail}</SidebarToggle>
-      </div>
+    <RailResizable
+      storageKey="rail:stocks"
+      className="space-y-4"
+      mobileRail={mobileRail}
+      top={topSection}
+      bottom={bottomSection}
+    >
       <StockHeader quote={quote} meta={meta} />
-      <StockTabs />
-      <section id="overview" className="scroll-mt-20 space-y-4">
-        <Suspense fallback={<Skeleton className="h-[520px] w-full" />}>
-          <ChartPanel symbol={symbol} exchange={exchange} />
-        </Suspense>
-      </section>
-      <Suspense fallback={<FundamentalsFallback />}>
-        <FundamentalsSections symbol={symbol} exchange={exchange} meta={meta} />
-      </Suspense>
-      <Suspense fallback={<Skeleton className="h-32 w-full" />}>
-        <TechnicalsSection symbol={symbol} exchange={exchange} />
-      </Suspense>
-      <aside className="hidden md:fixed md:bottom-0 md:right-0 md:top-12 md:z-20 md:flex md:w-[320px] md:flex-col md:gap-2 md:overflow-hidden md:border-l md:bg-background md:py-8 md:pl-5 md:pr-6">
-        {Rail}
-      </aside>
-    </div>
+      <StockTabs
+        overview={
+          <>
+            <section id="overview" className="scroll-mt-20 space-y-4">
+              <Suspense fallback={<Skeleton className="h-[520px] w-full" />}>
+                <ChartPanel symbol={symbol} exchange={exchange} />
+              </Suspense>
+            </section>
+            <Suspense fallback={<FundamentalsFallback />}>
+              <FundamentalsSections symbol={symbol} exchange={exchange} meta={meta} />
+            </Suspense>
+            <Suspense fallback={<Skeleton className="h-32 w-full" />}>
+              <TechnicalsSection symbol={symbol} exchange={exchange} />
+            </Suspense>
+          </>
+        }
+        news={
+          <Suspense fallback={<Skeleton className="h-72 w-full" />}>
+            <NewsSection
+              symbol={symbol}
+              exchange={exchange}
+              name={meta.name ?? quote.name}
+            />
+          </Suspense>
+        }
+      />
+    </RailResizable>
   );
 }
 
@@ -118,7 +142,11 @@ async function FundamentalsSections({
   exchange: Exchange;
   meta: MetaInfo;
 }) {
-  const fundamentals = await getFundamentals(symbol, exchange);
+  const [fundamentals, profile] = await Promise.all([
+    getFundamentals(symbol, exchange),
+    getCompanyProfile(symbol, exchange),
+  ]);
+  const displayName = meta.name ?? symbol;
   return (
     <>
       <section
@@ -132,6 +160,7 @@ async function FundamentalsSections({
         <SectionTitle>Key stats</SectionTitle>
         <KeyStatsGrid fundamentals={fundamentals} meta={meta} />
       </section>
+      <AboutSection name={displayName} profile={profile} />
     </>
   );
 }

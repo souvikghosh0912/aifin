@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 
 import { ExchangeSelect } from "@/components/stocks/exchange-select";
+import { MarketStatus } from "@/components/stocks/market-status";
 import type { MetaInfo, Quote } from "@/lib/market/types";
 import { cn, formatINR, signed } from "@/lib/utils";
 
@@ -100,6 +101,7 @@ export function StockHeader({ quote, meta }: Props) {
                 )}
               />
               <ExchangeSelect symbol={quote.symbol} current={quote.exchange} />
+              <MarketStatus exchange={quote.exchange} />
             </div>
             {meta.industry ? (
               <>

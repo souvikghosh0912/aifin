@@ -7,7 +7,7 @@ import {
   type MarketsCardData,
 } from "@/components/markets/markets-section";
 import { MarketsRailPanel } from "@/components/markets/markets-rail-panel";
-import { SidebarSearch } from "@/components/stocks/sidebar-search";
+import { RailResizable } from "@/components/stocks/rail-resizable";
 import { SidebarToggle } from "@/components/stocks/sidebar-toggle";
 import type { MarketQuoteSnapshot } from "@/lib/market/markets";
 import type { MarketEntry } from "@/lib/market/markets-catalog";
@@ -44,23 +44,31 @@ export function MarketsView({
     allEntries[0]?.id ?? "",
   );
 
-  const rail = (
-    <>
-      <SidebarSearch />
-      {topGainersSlot}
-      <MarketsRailPanel
-        entries={allEntries}
-        initialQuotes={allQuotes}
-        selectedEntryId={railEntryId}
-      />
-    </>
+  const topSection = topGainersSlot;
+  const bottomSection = (
+    <MarketsRailPanel
+      entries={allEntries}
+      initialQuotes={allQuotes}
+      selectedEntryId={railEntryId}
+    />
+  );
+  const mobileRail = (
+    <div className="md:hidden">
+      <SidebarToggle>
+        {topSection}
+        {bottomSection}
+      </SidebarToggle>
+    </div>
   );
 
   return (
-    <div className="space-y-10 pb-12 md:pr-[320px]">
-      <div className="md:hidden">
-        <SidebarToggle>{rail}</SidebarToggle>
-      </div>
+    <RailResizable
+      storageKey="rail:markets"
+      className="space-y-10 pb-12"
+      mobileRail={mobileRail}
+      top={topSection}
+      bottom={bottomSection}
+    >
       <div className="text-center">
         <h1 className="text-3xl font-bold tracking-tight md:text-4xl">
           Markets, India
@@ -82,10 +90,6 @@ export function MarketsView({
         initialRange={initialRange}
         onCardClick={setRailEntryId}
       />
-
-      <aside className="hidden md:fixed md:bottom-0 md:right-0 md:top-12 md:z-20 md:flex md:w-[320px] md:flex-col md:gap-2 md:overflow-hidden md:border-l md:bg-background md:py-8 md:pl-5 md:pr-6">
-        {rail}
-      </aside>
-    </div>
+    </RailResizable>
   );
 }

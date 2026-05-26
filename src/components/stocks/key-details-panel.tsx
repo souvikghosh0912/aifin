@@ -94,7 +94,7 @@ export async function KeyDetailsPanel({ symbol, exchange, quote, meta }: Props) 
     Date.now() - asOfDate.getTime() < 10 * 60_000;
 
   return (
-    <section className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain rounded-lg border bg-card">
+    <section className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain bg-card">
       <header className="flex items-center gap-2 px-3 pb-1.5 pt-2.5">
         <span
           aria-hidden

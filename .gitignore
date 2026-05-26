@@ -14,5 +14,10 @@ dist/
 .idea/
 .vscode/
 .claude/
+.superpowers/
 *.tsbuildinfo
 next-env.d.ts
+
+# Scratch / reference assets kept out of the repo
+/temp/
+/*.png

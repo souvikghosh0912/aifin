@@ -9,6 +9,9 @@ import { cn } from "@/lib/utils";
 export function AppSidebar() {
   const pathname = usePathname();
 
+  // News Flow uses a full-bleed layout with only the right rail.
+  if (pathname.includes("/news-flow")) return null;
+
   return (
     <aside className="hidden border-r bg-card/50 md:flex md:w-52 md:flex-col">
       <div className="flex h-12 items-center gap-2 border-b px-4 text-sm font-bold">

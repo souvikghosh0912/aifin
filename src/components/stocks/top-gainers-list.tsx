@@ -60,7 +60,7 @@ export async function TopGainersList({ activeSymbol }: Props) {
   const rows = await getTopGainers();
 
   return (
-    <section className="flex min-h-0 flex-1 flex-col rounded-lg border bg-card">
+    <section className="flex min-h-0 flex-1 flex-col bg-card">
       <header className="flex items-center justify-between border-b px-2.5 py-1.5">
         <button
           type="button"

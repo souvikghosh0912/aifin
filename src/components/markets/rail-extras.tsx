@@ -11,6 +11,8 @@ import {
   YAxis,
 } from "recharts";
 
+import { Profile } from "@/components/markets/rail-sections/profile";
+import { VolatilityCurve } from "@/components/markets/rail-sections/volatility-curve";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { Exchange } from "@/types/database";
 import type { HistoricalCandle } from "@/lib/market/types";
@@ -88,6 +90,8 @@ export function RailExtras(props: Props) {
       <Seasonals candles={longTerm} loading={loading} />
       <Technicals candles={daily} loading={loading} />
       <AtmIvTermStructure candles={daily} loading={loading} />
+      <VolatilityCurve candles={daily} loading={loading} />
+      <Profile />
     </div>
   );
 }
@@ -563,3 +567,4 @@ function AtmIvTermStructure({
     </section>
   );
 }
+
